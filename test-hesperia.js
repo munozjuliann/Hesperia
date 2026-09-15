@@ -1,24 +1,16 @@
 (function () {
-    "use strict";
 
-    const CATEGORIAS = {
-        arabes: "/fragancias-arabes",
-        disenador: "/fragancias-disenador"
-    };
+    console.log("HESPERIA RECOMENDADOS - INICIANDO");
 
-    function obtenerCategoria() {
-        const path = window.location.pathname;
+    /* =========================================================
+       CONFIGURACIÓN
+    ========================================================= */
 
-        if (path.includes("/fragancias-arabes/")) {
-            return CATEGORIAS.arabes;
-        }
+    const CANTIDAD_INICIAL = 8;
 
-        if (path.includes("/fragancias-disenador/")) {
-            return CATEGORIAS.disenador;
-        }
-
-        return null;
-    }
+    /* =========================================================
+       FUNCIONES GENERALES
+    ========================================================= */
 
     function mezclar(array) {
         const copia = [...array];
@@ -31,75 +23,171 @@
         return copia;
     }
 
-    function limpiarNombre(nombre) {
-        return nombre
-            .replace(/^Producto\s*-\s*/i, "")
-            .replace(/\s*-\s*[01]\s*$/i, "")
-            .trim();
+    function numeroPrecio(texto) {
+        if (!texto) return NaN;
+
+        return parseFloat(
+            texto
+                .replace("$", "")
+                .replace(/\./g, "")
+                .replace(",", ".")
+                .trim()
+        );
     }
 
-    async function obtenerProductos(categoria) {
-        try {
-            const respuesta = await fetch(
-                categoria + "?hesperia=" + Date.now(),
-                { cache: "no-store" }
-            );
+    /* =========================================================
+       DETECTAR PRODUCTO
+    ========================================================= */
 
-            if (!respuesta.ok) return [];
+    function esperarProducto() {
+
+        const producto = document.querySelector(".product-vip");
+
+        if (!producto) {
+            setTimeout(esperarProducto, 500);
+            return;
+        }
+
+        iniciar(producto);
+    }
+
+    /* =========================================================
+       DETECTAR CATEGORÍA
+    ========================================================= */
+
+    function obtenerCategoria() {
+
+        const pathname = window.location.pathname;
+
+        if (pathname.includes("/fragancias-arabes/")) {
+            return "/fragancias-arabes";
+        }
+
+        if (pathname.includes("/fragancias-disenador/")) {
+            return "/fragancias-disenador";
+        }
+
+        return null;
+    }
+
+    /* =========================================================
+       OBTENER PRODUCTOS DE LA CATEGORÍA
+    ========================================================= */
+
+    async function obtenerProductosCategoria(categoria) {
+
+        try {
+
+            const respuesta = await fetch(categoria);
+
+            if (!respuesta.ok) {
+                throw new Error("No se pudo cargar la categoría");
+            }
 
             const html = await respuesta.text();
 
-            const parser = new DOMParser();
-            const documento = parser.parseFromString(html, "text/html");
+            const documento = new DOMParser().parseFromString(
+                html,
+                "text/html"
+            );
 
             const productos = [];
-            const vistos = new Set();
 
-            documento
-                .querySelectorAll("img[alt^='Producto -']")
-                .forEach(function (imagen) {
+            documento.querySelectorAll("img").forEach(function (imagen) {
 
-                    const enlace = imagen.closest("a");
+                const alt = imagen.getAttribute("alt") || "";
 
-                    if (!enlace) return;
+                if (!alt.toLowerCase().startsWith("producto -")) {
+                    return;
+                }
 
-                    const url = enlace.href;
+                const enlace = imagen.closest("a");
 
-                    if (!url) return;
+                if (!enlace) {
+                    return;
+                }
 
-                    const urlLimpia =
-                        url.split("?")[0].replace(/\/$/, "");
+                const href = enlace.getAttribute("href");
 
-                    if (vistos.has(urlLimpia)) return;
+                if (!href) {
+                    return;
+                }
 
-                    vistos.add(urlLimpia);
+                const url = new URL(href, window.location.origin).href;
 
-                    productos.push({
-                        url: urlLimpia,
-                        nombre: limpiarNombre(imagen.alt || ""),
-                        imagen: imagen.src
-                    });
+                let nombre = alt
+                    .replace(/^Producto\s*-\s*/i, "")
+                    .replace(/\s*-\s*\d+$/, "")
+                    .trim();
+
+                if (!nombre) {
+                    nombre = "Producto";
+                }
+
+                productos.push({
+                    nombre: nombre,
+                    url: url,
+                    imagen: imagen.getAttribute("src")
                 });
 
-            return productos;
+            });
+
+            /* Eliminar productos duplicados */
+
+            const unicos = [];
+
+            const urls = new Set();
+
+            productos.forEach(function (producto) {
+
+                if (!urls.has(producto.url)) {
+
+                    urls.add(producto.url);
+                    unicos.push(producto);
+
+                }
+
+            });
+
+            /* Excluir producto actual */
+
+            const actual = window.location.href.split("?")[0];
+
+            const disponibles = unicos.filter(function (producto) {
+
+                return producto.url.split("?")[0] !== actual;
+
+            });
+
+            console.log(
+                "HESPERIA - PRODUCTOS ENCONTRADOS:",
+                disponibles.length
+            );
+
+            return disponibles;
 
         } catch (error) {
+
             console.error(
-                "HESPERIA - Error productos:",
+                "HESPERIA - ERROR OBTENIENDO PRODUCTOS:",
                 error
             );
 
             return [];
+
         }
+
     }
 
+    /* =========================================================
+       OBTENER PRECIOS
+    ========================================================= */
+
     async function obtenerPrecios(url) {
+
         try {
 
-            const respuesta = await fetch(
-                url + "?hesperia_precio=" + Date.now(),
-                { cache: "no-store" }
-            );
+            const respuesta = await fetch(url);
 
             if (!respuesta.ok) {
                 return {
@@ -110,64 +198,66 @@
 
             const html = await respuesta.text();
 
-            const parser = new DOMParser();
-            const documento =
-                parser.parseFromString(html, "text/html");
+            const documento = new DOMParser().parseFromString(
+                html,
+                "text/html"
+            );
 
             const precios = [];
 
-            documento
-                .querySelectorAll("body *")
-                .forEach(function (elemento) {
+            documento.querySelectorAll("body *").forEach(function (elemento) {
 
-                    const texto =
-                        (elemento.textContent || "").trim();
+                const texto = (elemento.textContent || "").trim();
 
-                    if (
-                        /^\$\s*[\d.,]+$/.test(texto) &&
-                        !precios.includes(texto)
-                    ) {
-                        precios.push(texto);
-                    }
-                });
+                if (
+                    /^\$\s*[\d.,]+$/.test(texto) &&
+                    !precios.includes(texto)
+                ) {
+                    precios.push(texto);
+                }
+
+            });
 
             const numericos = precios
-                .map(function (precio) {
-
-                    const numero = parseFloat(
-                        precio
-                            .replace("$", "")
-                            .replace(/\./g, "")
-                            .replace(",", ".")
-                    );
+                .map(function (texto) {
 
                     return {
-                        texto: precio,
-                        numero: numero
+                        texto: texto,
+                        numero: numeroPrecio(texto)
                     };
+
                 })
-                .filter(function (item) {
-                    return !isNaN(item.numero);
+                .filter(function (precio) {
+
+                    return !isNaN(precio.numero);
+
                 });
 
             numericos.sort(function (a, b) {
+
                 return b.numero - a.numero;
+
             });
 
             return {
+
+                /* Precio más alto = cuotas */
                 cuotas: numericos[0]
                     ? numericos[0].texto
                     : "",
 
+                /* Precio más bajo = transferencia */
                 transferencia: numericos.length > 1
                     ? numericos[numericos.length - 1].texto
                     : ""
+
             };
 
         } catch (error) {
 
             console.error(
-                "HESPERIA - Error precios:",
+                "HESPERIA - ERROR OBTENIENDO PRECIO:",
+                url,
                 error
             );
 
@@ -175,241 +265,21 @@
                 cuotas: "",
                 transferencia: ""
             };
+
         }
+
     }
 
-    function crearEstilos() {
-
-        if (
-            document.getElementById(
-                "hesperia-recomendados-css"
-            )
-        ) {
-            return;
-        }
-
-        const style = document.createElement("style");
-
-        style.id =
-            "hesperia-recomendados-css";
-
-        style.textContent = `
-
-        #hesperia-recomendados {
-            width: 100%;
-            margin: 60px auto 45px;
-            padding: 0 10px;
-            box-sizing: border-box;
-        }
-
-        #hesperia-recomendados .hesperia-titulo {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        #hesperia-recomendados .hesperia-titulo h2 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 500;
-            letter-spacing: .3px;
-        }
-
-        #hesperia-recomendados .hesperia-titulo p {
-            margin: 7px 0 0;
-            font-size: 13px;
-            opacity: .6;
-        }
-
-        #hesperia-recomendados .hesperia-carrusel {
-            position: relative;
-            width: 100%;
-        }
-
-        #hesperia-recomendados .hesperia-track {
-            display: flex;
-            gap: 20px;
-            overflow-x: auto;
-            overflow-y: hidden;
-            scroll-behavior: smooth;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
-            padding: 3px 3px 15px;
-            overscroll-behavior-x: contain;
-        }
-
-        #hesperia-recomendados .hesperia-track::-webkit-scrollbar {
-            display: none;
-        }
-
-        #hesperia-recomendados .hesperia-card {
-            flex: 0 0 calc((100% - 60px) / 4);
-            min-width: 0;
-            color: inherit;
-            text-decoration: none;
-            box-sizing: border-box;
-        }
-
-        #hesperia-recomendados .hesperia-imagen {
-            width: 100%;
-            aspect-ratio: 1 / 1;
-            background: #f7f7f7;
-            overflow: hidden;
-            margin-bottom: 13px;
-        }
-
-        #hesperia-recomendados .hesperia-imagen img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            display: block;
-            transition: transform .35s ease;
-        }
-
-        #hesperia-recomendados .hesperia-card:hover
-        .hesperia-imagen img {
-            transform: scale(1.04);
-        }
-
-        #hesperia-recomendados .hesperia-nombre {
-            font-size: 13px;
-            line-height: 1.35;
-            min-height: 36px;
-            margin-bottom: 10px;
-        }
-
-        #hesperia-recomendados .hesperia-precio {
-            margin-top: 5px;
-        }
-
-        #hesperia-recomendados .hesperia-precio-label {
-            display: block;
-            font-size: 10px;
-            line-height: 1.2;
-            opacity: .55;
-            margin-bottom: 2px;
-        }
-
-        #hesperia-recomendados .hesperia-precio-valor {
-            display: block;
-            font-size: 13px;
-            font-weight: 600;
-        }
-
-        #hesperia-recomendados .hesperia-flecha {
-            position: absolute;
-            top: 42%;
-            transform: translateY(-50%);
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            border: 1px solid rgba(0,0,0,.15);
-            background: rgba(255,255,255,.96);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 10;
-            font-size: 22px;
-            line-height: 1;
-            padding: 0;
-        }
-
-        #hesperia-recomendados
-        .hesperia-flecha-izq {
-            left: -18px;
-        }
-
-        #hesperia-recomendados
-        .hesperia-flecha-der {
-            right: -18px;
-        }
-
-        @media (max-width: 900px) {
-
-            #hesperia-recomendados .hesperia-card {
-                flex: 0 0 calc((100% - 20px) / 2);
-            }
-
-            #hesperia-recomendados .hesperia-flecha-izq {
-                left: 4px;
-            }
-
-            #hesperia-recomendados .hesperia-flecha-der {
-                right: 4px;
-            }
-        }
-
-        @media (max-width: 600px) {
-
-            #hesperia-recomendados {
-                margin-top: 40px;
-                padding-left: 8px;
-                padding-right: 8px;
-            }
-
-            #hesperia-recomendados
-            .hesperia-titulo {
-                margin-bottom: 22px;
-            }
-
-            #hesperia-recomendados
-            .hesperia-titulo h2 {
-                font-size: 20px;
-            }
-
-            #hesperia-recomendados
-            .hesperia-titulo p {
-                font-size: 12px;
-            }
-
-            #hesperia-recomendados
-            .hesperia-track {
-                gap: 12px;
-            }
-
-            #hesperia-recomendados
-            .hesperia-card {
-                flex: 0 0 calc((100% - 12px) / 2);
-            }
-
-            #hesperia-recomendados
-            .hesperia-nombre {
-                font-size: 12px;
-            }
-
-            #hesperia-recomendados
-            .hesperia-precio-label {
-                font-size: 9px;
-            }
-
-            #hesperia-recomendados
-            .hesperia-precio-valor {
-                font-size: 12px;
-            }
-
-            #hesperia-recomendados
-            .hesperia-flecha {
-                width: 32px;
-                height: 32px;
-                font-size: 18px;
-            }
-        }
-
-        `;
-
-        document.head.appendChild(style);
-    }
+    /* =========================================================
+       CREAR TARJETA
+    ========================================================= */
 
     function crearTarjeta(producto, precios) {
 
-        const tarjeta =
-            document.createElement("a");
+        const tarjeta = document.createElement("a");
 
-        tarjeta.className =
-            "hesperia-card";
-
-        tarjeta.href =
-            producto.url;
+        tarjeta.className = "hesperia-card";
+        tarjeta.href = producto.url;
 
         tarjeta.innerHTML = `
 
@@ -418,141 +288,144 @@
                 <img
                     src="${producto.imagen}"
                     alt="${producto.nombre}"
-                    loading="lazy">
+                    loading="lazy"
+                >
 
             </div>
 
-            <div class="hesperia-nombre">
-                ${producto.nombre}
+            <div class="hesperia-info">
+
+                <div class="hesperia-nombre">
+                    ${producto.nombre}
+                </div>
+
+                ${
+                    precios.cuotas
+                        ? `
+                            <div class="hesperia-precio-label">
+                                3 cuotas sin interés
+                            </div>
+
+                            <div class="hesperia-precio">
+                                ${precios.cuotas}
+                            </div>
+                        `
+                        : ""
+                }
+
+                ${
+                    precios.transferencia
+                        ? `
+                            <div class="hesperia-transferencia-label">
+                                Transferencia
+                            </div>
+
+                            <div class="hesperia-transferencia">
+                                ${precios.transferencia}
+                            </div>
+                        `
+                        : ""
+                }
+
             </div>
-
-            ${
-                precios.cuotas
-                    ? `
-                    <div class="hesperia-precio">
-
-                        <span class="hesperia-precio-label">
-                            3 cuotas sin interés
-                        </span>
-
-                        <span class="hesperia-precio-valor">
-                            ${precios.cuotas}
-                        </span>
-
-                    </div>
-                    `
-                    : ""
-            }
-
-            ${
-                precios.transferencia
-                    ? `
-                    <div class="hesperia-precio">
-
-                        <span class="hesperia-precio-label">
-                            Transferencia
-                        </span>
-
-                        <span class="hesperia-precio-valor">
-                            ${precios.transferencia}
-                        </span>
-
-                    </div>
-                    `
-                    : ""
-            }
 
         `;
 
         return tarjeta;
     }
 
-    async function crearRecomendados() {
+    /* =========================================================
+       INICIAR
+    ========================================================= */
 
-        if (
-            document.getElementById(
-                "hesperia-recomendados"
-            )
-        ) {
+    async function iniciar(productoPrincipal) {
+
+        /* Evitar duplicados */
+
+        if (document.querySelector("#hesperia-recomendados")) {
             return;
         }
 
-        const productoPrincipal =
-            document.querySelector(
-                ".product-vip"
+        const categoria = obtenerCategoria();
+
+        if (!categoria) {
+            console.log("HESPERIA - Categoría no detectada");
+            return;
+        }
+
+        console.log(
+            "HESPERIA - CATEGORÍA:",
+            categoria
+        );
+
+        /* Obtener productos */
+
+        const disponibles =
+            await obtenerProductosCategoria(categoria);
+
+        if (!disponibles.length) {
+            console.log(
+                "HESPERIA - NO HAY PRODUCTOS DISPONIBLES"
             );
+            return;
+        }
 
-        if (!productoPrincipal) return;
+        /* =====================================================
+           OBTENER PRECIOS DE TODOS LOS PRODUCTOS
+        ===================================================== */
 
-        const categoria =
-            obtenerCategoria();
+        console.log(
+            "HESPERIA - OBTENIENDO PRECIOS..."
+        );
 
-        if (!categoria) return;
+        const productosConPrecio = [];
 
-        crearEstilos();
+        for (const producto of disponibles) {
 
-        const todos =
-            await obtenerProductos(categoria);
+            const precios =
+                await obtenerPrecios(producto.url);
 
-        if (!todos.length) return;
+            productosConPrecio.push({
 
-        const actual =
-            window.location.href
-                .split("?")[0]
-                .replace(/\/$/, "");
-
-        /*
-         * Eliminamos el producto actual
-         */
-
-        let disponibles =
-            todos.filter(function (producto) {
-
-                return producto.url !== actual;
+                producto: producto,
+                precios: precios
 
             });
 
-        /*
-         * Orden aleatorio diferente
-         * cada vez que se carga la página.
-         */
+        }
 
-        disponibles =
-            mezclar(disponibles);
+        console.log(
+            "HESPERIA - PRODUCTOS CON PRECIOS:",
+            productosConPrecio.length
+        );
 
-        if (!disponibles.length) return;
+        if (!productosConPrecio.length) {
+            return;
+        }
 
-        /*
-         * Creamos la sección.
-         */
+        /* =====================================================
+           CREAR CONTENEDOR
+        ===================================================== */
 
-        const seccion =
+        const contenedor =
             document.createElement("section");
 
-        seccion.id =
+        contenedor.id =
             "hesperia-recomendados";
 
-        seccion.innerHTML = `
+        contenedor.innerHTML = `
 
             <div class="hesperia-titulo">
-
-                <h2>
-                    También te puede interesar
-                </h2>
-
-                <p>
-                    Descubrí otras fragancias
-                </p>
-
+                También te puede interesar
             </div>
 
-            <div class="hesperia-carrusel">
+            <div class="hesperia-carousel">
 
                 <button
                     type="button"
-                    class="hesperia-flecha
-                           hesperia-flecha-izq"
-                    aria-label="Anterior">
+                    class="hesperia-flecha hesperia-flecha-izquierda"
+                    aria-label="Productos anteriores"
+                >
                     ‹
                 </button>
 
@@ -560,330 +433,715 @@
 
                 <button
                     type="button"
-                    class="hesperia-flecha
-                           hesperia-flecha-der"
-                    aria-label="Siguiente">
+                    class="hesperia-flecha hesperia-flecha-derecha"
+                    aria-label="Productos siguientes"
+                >
                     ›
                 </button>
 
             </div>
+
         `;
 
         productoPrincipal.insertAdjacentElement(
             "afterend",
-            seccion
+            contenedor
         );
+
+        /* =====================================================
+           ESTILOS
+        ===================================================== */
+
+        const estilos =
+            document.createElement("style");
+
+        estilos.textContent = `
+
+            #hesperia-recomendados {
+                width: 100%;
+                max-width: 1400px;
+                margin: 60px auto 45px;
+                padding: 0 10px;
+                box-sizing: border-box;
+            }
+
+            .hesperia-titulo {
+                font-size: 24px;
+                font-weight: 500;
+                text-align: center;
+                margin-bottom: 28px;
+                color: #111;
+                letter-spacing: .2px;
+            }
+
+            .hesperia-carousel {
+                position: relative;
+                width: 100%;
+            }
+
+            .hesperia-track {
+                display: flex;
+                gap: 20px;
+                width: 100%;
+                overflow-x: auto;
+                overflow-y: hidden;
+                scroll-behavior: smooth;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                padding: 5px 0 15px;
+                box-sizing: border-box;
+            }
+
+            .hesperia-track::-webkit-scrollbar {
+                display: none;
+            }
+
+            .hesperia-card {
+                flex: 0 0 calc((100% - 60px) / 4);
+                min-width: 0;
+                box-sizing: border-box;
+                text-decoration: none;
+                color: inherit;
+                display: block;
+            }
+
+            .hesperia-imagen {
+                width: 100%;
+                aspect-ratio: 1 / 1;
+                background: #f7f7f7;
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .hesperia-imagen img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                display: block;
+                transition: transform .35s ease;
+            }
+
+            .hesperia-card:hover
+            .hesperia-imagen img {
+                transform: scale(1.035);
+            }
+
+            .hesperia-info {
+                padding: 14px 3px 0;
+            }
+
+            .hesperia-nombre {
+                font-size: 14px;
+                line-height: 1.35;
+                min-height: 38px;
+                color: #222;
+                margin-bottom: 9px;
+            }
+
+            .hesperia-precio-label {
+                font-size: 11px;
+                color: #777;
+                margin-bottom: 2px;
+            }
+
+            .hesperia-precio {
+                font-size: 16px;
+                font-weight: 600;
+                color: #111;
+                margin-bottom: 8px;
+            }
+
+            .hesperia-transferencia-label {
+                font-size: 11px;
+                color: #777;
+                margin-bottom: 2px;
+            }
+
+            .hesperia-transferencia {
+                font-size: 15px;
+                font-weight: 500;
+                color: #111;
+            }
+
+            .hesperia-flecha {
+                position: absolute;
+                top: 42%;
+                transform: translateY(-50%);
+                z-index: 5;
+
+                width: 38px;
+                height: 38px;
+
+                border: 0;
+                border-radius: 50%;
+
+                background: rgba(255,255,255,.96);
+                box-shadow: 0 2px 12px rgba(0,0,0,.14);
+
+                cursor: pointer;
+
+                display: flex;
+                align-items: center;
+                justify-content: center;
+
+                font-size: 27px;
+                line-height: 1;
+
+                color: #111;
+
+                transition:
+                    opacity .2s ease,
+                    transform .2s ease;
+            }
+
+            .hesperia-flecha:hover {
+                transform: translateY(-50%) scale(1.05);
+            }
+
+            .hesperia-flecha-izquierda {
+                left: -18px;
+            }
+
+            .hesperia-flecha-derecha {
+                right: -18px;
+            }
+
+            @media (max-width: 900px) {
+
+                .hesperia-card {
+                    flex: 0 0 calc((100% - 20px) / 2);
+                }
+
+                .hesperia-titulo {
+                    font-size: 21px;
+                }
+
+                .hesperia-flecha-izquierda {
+                    left: -8px;
+                }
+
+                .hesperia-flecha-derecha {
+                    right: -8px;
+                }
+
+            }
+
+            @media (max-width: 600px) {
+
+                #hesperia-recomendados {
+                    margin-top: 45px;
+                    padding: 0 8px;
+                }
+
+                .hesperia-track {
+                    gap: 12px;
+                }
+
+                .hesperia-card {
+                    flex: 0 0 calc((100% - 12px) / 2);
+                }
+
+                .hesperia-titulo {
+                    font-size: 20px;
+                    margin-bottom: 22px;
+                }
+
+                .hesperia-nombre {
+                    font-size: 13px;
+                }
+
+                .hesperia-precio {
+                    font-size: 15px;
+                }
+
+                .hesperia-transferencia {
+                    font-size: 14px;
+                }
+
+                .hesperia-flecha {
+                    width: 32px;
+                    height: 32px;
+                    font-size: 22px;
+                }
+
+                .hesperia-flecha-izquierda {
+                    left: -4px;
+                }
+
+                .hesperia-flecha-derecha {
+                    right: -4px;
+                }
+
+            }
+
+        `;
+
+        document.head.appendChild(estilos);
+
+        /* =====================================================
+           TRACK
+        ===================================================== */
 
         const track =
-            seccion.querySelector(
-                ".hesperia-track"
+            contenedor.querySelector(".hesperia-track");
+
+        const flechaIzquierda =
+            contenedor.querySelector(
+                ".hesperia-flecha-izquierda"
             );
 
-        const izquierda =
-            seccion.querySelector(
-                ".hesperia-flecha-izq"
+        const flechaDerecha =
+            contenedor.querySelector(
+                ".hesperia-flecha-derecha"
             );
 
-        const derecha =
-            seccion.querySelector(
-                ".hesperia-flecha-der"
-            );
+        /* =====================================================
+           SISTEMA DE PRODUCTOS INFINITO
+        ===================================================== */
+
+        let indiceActual = 0;
+
+        let productosDisponibles =
+            mezclar(productosConPrecio);
 
         /*
-         * Obtenemos precios.
+         * Guardamos los últimos productos utilizados para
+         * evitar que aparezcan inmediatamente otra vez.
          */
 
-        const productosConPrecio =
-            await Promise.all(
+        let usadosRecientemente = [];
 
-                disponibles.map(
-                    async function (producto) {
+        /* =====================================================
+           AGREGAR PRODUCTOS
+        ===================================================== */
 
-                        const precios =
-                            await obtenerPrecios(
-                                producto.url
-                            );
+        function obtenerSiguienteProducto() {
 
-                        return {
-                            producto: producto,
-                            precios: precios
-                        };
+            let candidatos =
+                productosDisponibles.filter(function (item) {
 
-                    }
-                )
+                    return !usadosRecientemente.some(function (usado) {
 
-            );
+                        return usado.producto.url ===
+                            item.producto.url;
 
-        /*
-         * Para crear un loop REAL:
-         *
-         * [A B C D E F]
-         * [A B C D E F]
-         * [A B C D E F]
-         *
-         * El usuario comienza en
-         * el bloque central.
-         */
+                    });
 
-        const bloque1 =
-            productosConPrecio;
+                });
 
-        const bloque2 =
-            productosConPrecio.map(
-                function (item) {
+            /*
+             * Si ya utilizamos demasiados productos,
+             * reiniciamos el historial.
+             */
 
-                    return {
-                        producto: item.producto,
-                        precios: item.precios
-                    };
+            if (!candidatos.length) {
 
-                }
-            );
+                usadosRecientemente = [];
 
-        const bloque3 =
-            productosConPrecio.map(
-                function (item) {
+                candidatos =
+                    [...productosDisponibles];
 
-                    return {
-                        producto: item.producto,
-                        precios: item.precios
-                    };
+            }
 
-                }
-            );
-
-        const bloques = [
-            ...bloque1,
-            ...bloque2,
-            ...bloque3
-        ];
-
-        bloques.forEach(
-            function (item) {
-
-                track.appendChild(
-                    crearTarjeta(
-                        item.producto,
-                        item.precios
+            const elegido =
+                candidatos[
+                    Math.floor(
+                        Math.random() *
+                        candidatos.length
                     )
-                );
+                ];
+
+            usadosRecientemente.push(elegido);
+
+            /*
+             * Guardamos solamente los últimos 50
+             * para que nunca crezca demasiado.
+             */
+
+            if (usadosRecientemente.length > 50) {
+
+                usadosRecientemente.shift();
 
             }
-        );
 
-        /*
-         * Esperamos a que el navegador
-         * calcule los tamaños.
-         */
+            return elegido;
+        }
 
-        requestAnimationFrame(
-            function () {
+        function agregarProducto() {
 
-                const tarjetas =
-                    track.querySelectorAll(
-                        ".hesperia-card"
-                    );
-
-                if (!tarjetas.length) return;
-
-                /*
-                 * Calculamos el ancho
-                 * del primer bloque.
-                 */
-
-                let anchoBloque = 0;
-
-                for (
-                    let i = 0;
-                    i < productosConPrecio.length;
-                    i++
-                ) {
-
-                    anchoBloque +=
-                        tarjetas[i]
-                            .getBoundingClientRect()
-                            .width;
-
-                }
-
-                const estilo =
-                    window.getComputedStyle(
-                        track
-                    );
-
-                const gap =
-                    parseFloat(
-                        estilo.gap || "0"
-                    );
-
-                anchoBloque +=
-                    gap *
-                    Math.max(
-                        0,
-                        productosConPrecio.length - 1
-                    );
-
-                /*
-                 * Empezamos en el bloque central.
-                 */
-
-                track.scrollLeft =
-                    anchoBloque;
-
-                /*
-                 * Loop instantáneo.
-                 */
-
-                let ajustando = false;
-
-                track.addEventListener(
-                    "scroll",
-                    function () {
-
-                        if (ajustando) return;
-
-                        const limiteSuperior =
-                            anchoBloque * 1.5;
-
-                        const limiteInferior =
-                            anchoBloque * 0.5;
-
-                        if (
-                            track.scrollLeft >
-                            limiteSuperior
-                        ) {
-
-                            ajustando = true;
-
-                            track.scrollLeft -=
-                                anchoBloque;
-
-                            requestAnimationFrame(
-                                function () {
-                                    ajustando = false;
-                                }
-                            );
-
-                        }
-
-                        else if (
-                            track.scrollLeft <
-                            limiteInferior
-                        ) {
-
-                            ajustando = true;
-
-                            track.scrollLeft +=
-                                anchoBloque;
-
-                            requestAnimationFrame(
-                                function () {
-                                    ajustando = false;
-                                }
-                            );
-
-                        }
-
-                    },
-                    {
-                        passive: true
-                    }
-                );
-
-            }
-        );
-
-        /*
-         * Flechas.
-         */
-
-        function mover(direccion) {
+            const producto =
+                obtenerSiguienteProducto();
 
             const tarjeta =
-                track.querySelector(
-                    ".hesperia-card"
+                crearTarjeta(
+                    producto.producto,
+                    producto.precios
                 );
 
-            if (!tarjeta) return;
+            track.appendChild(tarjeta);
 
-            const estilo =
-                window.getComputedStyle(
-                    track
-                );
+            return tarjeta;
+        }
 
-            const gap =
-                parseFloat(
-                    estilo.gap || "0"
-                );
+        /* =====================================================
+           CREAR LOS PRIMEROS 8
+        ===================================================== */
 
-            const distancia =
-                tarjeta.getBoundingClientRect()
-                    .width +
-                gap;
+        for (
+            let i = 0;
+            i < Math.min(
+                CANTIDAD_INICIAL,
+                productosDisponibles.length
+            );
+            i++
+        ) {
 
-            track.scrollBy({
-
-                left:
-                    direccion *
-                    distancia *
-                    4,
-
-                behavior:
-                    "smooth"
-
-            });
+            agregarProducto();
 
         }
 
-        izquierda.addEventListener(
-            "click",
-            function () {
-                mover(-1);
+        /* =====================================================
+           SCROLL INFINITO
+        ===================================================== */
+
+        let agregando = false;
+
+        function revisarScroll() {
+
+            if (agregando) {
+                return;
             }
-        );
 
-        derecha.addEventListener(
-            "click",
-            function () {
-                mover(1);
-            }
-        );
-    }
+            const distanciaAlFinal =
+                track.scrollWidth -
+                track.scrollLeft -
+                track.clientWidth;
 
-    /*
-     * Esperar a que cargue el producto.
-     */
+            /*
+             * Cuando quedan aproximadamente 3 tarjetas
+             * para llegar al final, agregamos más.
+             */
 
-    let intentos = 0;
+            if (distanciaAlFinal < track.clientWidth * 2) {
 
-    const espera =
-        setInterval(
-            function () {
+                agregando = true;
 
-                intentos++;
+                /*
+                 * Agregamos 4 productos nuevos.
+                 */
 
-                if (
-                    document.querySelector(
-                        ".product-vip"
-                    )
-                ) {
+                for (let i = 0; i < 4; i++) {
 
-                    clearInterval(
-                        espera
-                    );
-
-                    crearRecomendados();
+                    agregarProducto();
 
                 }
 
-                if (intentos >= 60) {
-                    clearInterval(
-                        espera
-                    );
+                setTimeout(function () {
+
+                    agregando = false;
+
+                }, 100);
+
+            }
+
+        }
+
+        /*
+         * IMPORTANTE:
+         * No modificamos scrollLeft mientras el usuario
+         * se está desplazando.
+         *
+         * Esto evita el problema del auto-scroll.
+         */
+
+        track.addEventListener(
+            "scroll",
+            revisarScroll,
+            {
+                passive: true
+            }
+        );
+
+        /* =====================================================
+           FLECHAS
+        ===================================================== */
+
+        function cantidadDesplazamiento() {
+
+            const tarjeta =
+                track.querySelector(".hesperia-card");
+
+            if (!tarjeta) {
+                return 300;
+            }
+
+            const ancho =
+                tarjeta.getBoundingClientRect().width;
+
+            const gap =
+                window.innerWidth <= 600
+                    ? 12
+                    : 20;
+
+            /*
+             * PC = 4 tarjetas
+             * Mobile = 2 tarjetas
+             */
+
+            const cantidad =
+                window.innerWidth <= 900
+                    ? 2
+                    : 4;
+
+            return (
+                (ancho + gap) * cantidad
+            );
+
+        }
+
+        /* =====================================================
+           FLECHA DERECHA
+        ===================================================== */
+
+        flechaDerecha.addEventListener(
+            "click",
+            function (evento) {
+
+                evento.preventDefault();
+                evento.stopPropagation();
+
+                track.scrollBy({
+
+                    left:
+                        cantidadDesplazamiento(),
+
+                    behavior: "smooth"
+
+                });
+
+            }
+        );
+
+        /* =====================================================
+           FLECHA IZQUIERDA
+        ===================================================== */
+
+        flechaIzquierda.addEventListener(
+            "click",
+            function (evento) {
+
+                evento.preventDefault();
+                evento.stopPropagation();
+
+                /*
+                 * Si estamos muy cerca del inicio,
+                 * agregamos productos adelante.
+                 */
+
+                if (track.scrollLeft < 300) {
+
+                    const cantidadAnterior =
+                        track.scrollWidth;
+
+                    /*
+                     * Guardamos los productos actuales
+                     * para crear nuevos antes del primero.
+                     */
+
+                    const nuevos = [];
+
+                    for (let i = 0; i < 4; i++) {
+
+                        nuevos.push(
+                            obtenerSiguienteProducto()
+                        );
+
+                    }
+
+                    const scrollAnterior =
+                        track.scrollLeft;
+
+                    nuevos.reverse().forEach(function (item) {
+
+                        const tarjeta =
+                            crearTarjeta(
+                                item.producto,
+                                item.precios
+                            );
+
+                        track.insertBefore(
+                            tarjeta,
+                            track.firstElementChild
+                        );
+
+                    });
+
+                    /*
+                     * Compensamos el scroll para que
+                     * visualmente el usuario no salte.
+                     */
+
+                    requestAnimationFrame(function () {
+
+                        let agregado = 0;
+
+                        track
+                            .querySelectorAll(".hesperia-card")
+                            .forEach(function (card, index) {
+
+                                if (index < 4) {
+
+                                    agregado +=
+                                        card.getBoundingClientRect().width;
+
+                                    if (index < 3) {
+
+                                        agregado +=
+                                            window.innerWidth <= 600
+                                                ? 12
+                                                : 20;
+
+                                    }
+
+                                }
+
+                            });
+
+                        track.scrollLeft =
+                            scrollAnterior +
+                            agregado;
+
+                        requestAnimationFrame(function () {
+
+                            track.scrollBy({
+
+                                left:
+                                    -cantidadDesplazamiento(),
+
+                                behavior: "smooth"
+
+                            });
+
+                        });
+
+                    });
+
+                    return;
+
+                }
+
+                track.scrollBy({
+
+                    left:
+                        -cantidadDesplazamiento(),
+
+                    behavior: "smooth"
+
+                });
+
+            }
+        );
+
+        /* =====================================================
+           EVITAR CLICK ACCIDENTAL DURANTE SWIPE
+        ===================================================== */
+
+        let inicioX = 0;
+        let moviendo = false;
+
+        track.addEventListener(
+            "touchstart",
+            function (evento) {
+
+                if (
+                    evento.touches &&
+                    evento.touches.length
+                ) {
+
+                    inicioX =
+                        evento.touches[0].clientX;
+
+                    moviendo = false;
+
                 }
 
             },
-            500
+            {
+                passive: true
+            }
         );
+
+        track.addEventListener(
+            "touchmove",
+            function (evento) {
+
+                if (
+                    evento.touches &&
+                    evento.touches.length
+                ) {
+
+                    const actualX =
+                        evento.touches[0].clientX;
+
+                    if (
+                        Math.abs(
+                            actualX - inicioX
+                        ) > 10
+                    ) {
+
+                        moviendo = true;
+
+                    }
+
+                }
+
+            },
+            {
+                passive: true
+            }
+        );
+
+        track.addEventListener(
+            "touchend",
+            function () {
+
+                setTimeout(function () {
+
+                    moviendo = false;
+
+                }, 150);
+
+            },
+            {
+                passive: true
+            }
+        );
+
+        /* =====================================================
+           CARGAR MÁS SI LA VENTANA CAMBIA DE TAMAÑO
+        ===================================================== */
+
+        window.addEventListener(
+            "resize",
+            function () {
+
+                revisarScroll();
+
+            }
+        );
+
+        console.log(
+            "HESPERIA - RECOMENDADOS LISTOS"
+        );
+
+    }
+
+    /* =========================================================
+       INICIAR
+    ========================================================= */
+
+    esperarProducto();
 
 })();
