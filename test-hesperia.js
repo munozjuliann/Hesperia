@@ -1,11 +1,11 @@
 (function () {
 
-  function buscarProducto() {
+  function iniciar() {
 
     var producto = document.querySelector(".product-vip");
 
     if (!producto) {
-      setTimeout(buscarProducto, 500);
+      setTimeout(iniciar, 500);
       return;
     }
 
@@ -20,32 +20,40 @@
       .then(function (html) {
 
         var doc = new DOMParser().parseFromString(html, "text/html");
-
         var imagenes = doc.querySelectorAll("img");
-        var datos = [];
+
+        var productos = [];
 
         for (var i = 0; i < imagenes.length; i++) {
 
           var img = imagenes[i];
 
-          var src =
-            img.getAttribute("src") ||
-            img.getAttribute("data-src") ||
-            "";
-
           var alt = img.getAttribute("alt") || "";
 
-          if (src) {
-            datos.push(
-              "<div style='padding:15px 0;border-bottom:1px solid #ccc;'>" +
-              "<strong>ALT:</strong> " + alt +
-              "<br>" +
-              "<strong>IMG:</strong> " + src +
-              "</div>"
-            );
-          }
+          if (alt.indexOf("Producto -") !== 0) continue;
 
-          if (datos.length >= 30) break;
+          var enlace = img.closest("a");
+
+          if (!enlace) continue;
+
+          var href = enlace.getAttribute("href");
+
+          if (!href) continue;
+
+          productos.push({
+            nombre: alt
+              .replace(/^Producto - /, "")
+              .replace(/ - [01]$/, "")
+              .trim(),
+
+            imagen:
+              img.getAttribute("src") ||
+              img.getAttribute("data-src") ||
+              "",
+
+            url: href
+          });
+
         }
 
         var bloque = document.createElement("div");
@@ -54,21 +62,27 @@
           "margin:40px 0;padding:30px;background:#f5f5f5;color:#111;text-align:left;";
 
         bloque.innerHTML =
-          "<h2>IMÁGENES DE LA CATEGORÍA</h2>" +
-          "<p>Total de imágenes encontradas: " + imagenes.length + "</p>" +
-          datos.join("");
+          "<h2>PRODUCTOS + URL</h2>" +
+          "<p>Encontrados: " + productos.length + "</p>" +
+          productos.slice(0, 20).map(function (p) {
+
+            return (
+              "<div style='padding:12px 0;border-bottom:1px solid #ccc;'>" +
+              "<strong>" + p.nombre + "</strong><br>" +
+              "<small>" + p.url + "</small>" +
+              "</div>"
+            );
+
+          }).join("");
 
         producto.appendChild(bloque);
 
-        console.log("HESPERIA imágenes:", imagenes.length);
+        console.log("HESPERIA PRODUCTOS:", productos);
 
-      })
-      .catch(function (error) {
-        console.log("HESPERIA ERROR:", error);
       });
 
   }
 
-  buscarProducto();
+  iniciar();
 
 })();
