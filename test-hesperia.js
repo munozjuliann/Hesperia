@@ -4,27 +4,22 @@
   /* =========================================================
      HESPERIA PARFUM
      CARRUSEL DE RECOMENDADOS
-     VERSION 42
+     VERSION 43 - CARGA RAPIDA
      ========================================================= */
 
   const CONFIG = {
     iniciales: 8,
     porCarga: 4,
 
-    // Cantidad máxima aproximada de productos a conseguir
     catalogoObjetivo: 80,
-
-    // Máximo de marcas a consultar
     maxMarcasAConsultar: 20,
 
-    // Pausas para evitar demasiadas peticiones seguidas
     pausaMarcas: 300,
 
-    // Productos individuales: se consultan de a 2
+    // Productos cuyos precios se consultan simultáneamente
     productosPorLote: 2,
 
-    // Separación entre lotes de productos
-    pausaProductos: 150
+    pausaProductos: 100
   };
 
 
@@ -39,10 +34,11 @@
   let productosDisponibles = [];
 
   let productosMostrados = new Set();
+  let productosProcesando = new Set();
 
-  let cargando = false;
-  let catalogoCargado = false;
   let catalogoCargando = false;
+  let catalogoCargado = false;
+  let cargando = false;
 
   let contenedor = null;
   let viewport = null;
@@ -68,19 +64,12 @@
 
     for (let i = copia.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [copia[i], copia[j]] = [copia[j], copia[i]];
+
+      [copia[i], copia[j]] =
+        [copia[j], copia[i]];
     }
 
     return copia;
-  }
-
-
-  function normalizarUrl(url) {
-    try {
-      return new URL(url, window.location.origin).href;
-    } catch (e) {
-      return url;
-    }
   }
 
 
@@ -92,14 +81,13 @@
   }
 
 
-  function extraerPrecio(texto) {
-    if (!texto) return "";
-
-    const match = texto.match(
-      /\$\s?[\d.]+(?:,\d{1,2})?/i
-    );
-
-    return match ? match[0].trim() : "";
+  function escaparHtml(texto) {
+    return String(texto || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
 
@@ -107,11 +95,23 @@
     if (!productoActual) return false;
 
     try {
-      const actual = new URL(productoActual, window.location.origin);
-      const otra = new URL(url, window.location.origin);
+      const actual =
+        new URL(
+          productoActual,
+          window.location.origin
+        );
 
-      return actual.pathname.replace(/\/$/, "") ===
-             otra.pathname.replace(/\/$/, "");
+      const otro =
+        new URL(
+          url,
+          window.location.origin
+        );
+
+      return (
+        actual.pathname.replace(/\/$/, "") ===
+        otro.pathname.replace(/\/$/, "")
+      );
+
     } catch (e) {
       return url === productoActual;
     }
@@ -123,116 +123,293 @@
      ========================================================= */
 
   function detectarCategoria() {
-    const path = window.location.pathname.toLowerCase();
 
-    if (path.includes("/fragancias-arabes/")) {
-      categoriaActual = "fragancias-arabes";
-    } else if (path.includes("/fragancias-disenador/")) {
-      categoriaActual = "fragancias-disenador";
+    const path =
+      window.location.pathname.toLowerCase();
+
+    if (
+      path.includes("/fragancias-arabes/")
+    ) {
+
+      categoriaActual =
+        "fragancias-arabes";
+
+    } else if (
+      path.includes("/fragancias-disenador/")
+    ) {
+
+      categoriaActual =
+        "fragancias-disenador";
+
     } else {
+
       categoriaActual = "";
+
     }
 
-    productoActual = window.location.href;
+    productoActual =
+      window.location.href;
 
     return categoriaActual;
   }
 
 
   /* =========================================================
-     EXTRAER PRODUCTOS DE UNA PAGINA
+     EXTRAER PRODUCTOS
      ========================================================= */
 
-  function extraerProductos(html, categoria) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
+  function extraerProductos(
+    html,
+    categoria
+  ) {
 
-    const enlaces = Array.from(doc.querySelectorAll("a[href]"));
+    const parser =
+      new DOMParser();
+
+    const doc =
+      parser.parseFromString(
+        html,
+        "text/html"
+      );
+
+    const enlaces =
+      Array.from(
+        doc.querySelectorAll(
+          "a[href]"
+        )
+      );
 
     const productos = [];
     const vistos = new Set();
 
     enlaces.forEach(enlace => {
-      const hrefOriginal = enlace.getAttribute("href");
 
-      if (!hrefOriginal) return;
+      const href =
+        enlace.getAttribute(
+          "href"
+        );
+
+      if (!href) return;
 
       let url;
 
       try {
-        url = new URL(hrefOriginal, window.location.origin);
+
+        url =
+          new URL(
+            href,
+            window.location.origin
+          );
+
       } catch (e) {
+
         return;
+
       }
 
-      const path = url.pathname
-        .replace(/^\/|\/$/g, "")
-        .split("/")
-        .filter(Boolean);
+
+      const path =
+        url.pathname
+          .replace(/^\/|\/$/g, "")
+          .split("/")
+          .filter(Boolean);
+
 
       /*
        * Producto:
        *
-       * /fragancias-arabes/marca/producto
-       *
-       * = 3 segmentos
-       *
-       * Pero internamente usamos los dos segmentos posteriores
+       * /categoria/marca/producto
        */
 
-      if (path.length !== 3) return;
-
-      if (path[0].toLowerCase() !== categoria.toLowerCase()) {
+      if (path.length !== 3) {
         return;
       }
 
-      const urlFinal = url.href;
 
-      if (vistos.has(urlFinal)) return;
-      if (esProductoActual(urlFinal)) return;
+      if (
+        path[0].toLowerCase() !==
+        categoria.toLowerCase()
+      ) {
+        return;
+      }
 
-      vistos.add(urlFinal);
+
+      const urlFinal =
+        url.href;
+
+
+      if (
+        vistos.has(urlFinal)
+      ) {
+        return;
+      }
+
+
+      if (
+        esProductoActual(
+          urlFinal
+        )
+      ) {
+        return;
+      }
+
 
       const imagen =
-        enlace.querySelector("img") ||
-        enlace.closest("div, article, li")?.querySelector("img");
+        enlace.querySelector(
+          "img"
+        ) ||
+        enlace.closest(
+          "div, article, li"
+        )?.querySelector(
+          "img"
+        );
+
 
       let src = "";
 
       if (imagen) {
+
         src =
-          imagen.getAttribute("src") ||
-          imagen.getAttribute("data-src") ||
-          imagen.getAttribute("data-lazy-src") ||
+          imagen.getAttribute(
+            "src"
+          ) ||
+          imagen.getAttribute(
+            "data-src"
+          ) ||
+          imagen.getAttribute(
+            "data-lazy-src"
+          ) ||
           "";
+
       }
+
 
       let nombre = "";
 
+
       if (imagen) {
+
         nombre =
-          imagen.getAttribute("alt") ||
+          imagen.getAttribute(
+            "alt"
+          ) ||
           "";
+
       }
+
 
       if (!nombre) {
+
         nombre =
-          enlace.getAttribute("title") ||
-          limpiarTexto(enlace.textContent);
+          enlace.getAttribute(
+            "title"
+          ) ||
+          limpiarTexto(
+            enlace.textContent
+          );
+
       }
 
-      nombre = limpiarTexto(nombre);
 
-      if (!nombre) return;
+      nombre =
+        limpiarTexto(
+          nombre
+        );
+
+
+      if (!nombre) {
+        return;
+      }
+
+
+      vistos.add(
+        urlFinal
+      );
+
 
       productos.push({
         url: urlFinal,
         nombre: nombre,
-        imagen: src
+        imagen: src,
+        precioNormal: "",
+        precioCuotas: "",
+        precioTransferencia: ""
       });
+
     });
 
+
     return productos;
+  }
+
+
+  /* =========================================================
+     AGREGAR AL CATALOGO SIN DUPLICADOS
+     ========================================================= */
+
+  function agregarAlCatalogo(
+    productos
+  ) {
+
+    productos.forEach(producto => {
+
+      if (!producto.url) {
+        return;
+      }
+
+
+      if (
+        esProductoActual(
+          producto.url
+        )
+      ) {
+        return;
+      }
+
+
+      const existe =
+        productosCatalogo.some(
+          p =>
+            p.url ===
+            producto.url
+        );
+
+
+      if (!existe) {
+
+        productosCatalogo.push(
+          producto
+        );
+
+      }
+
+    });
+
+
+    actualizarDisponibles();
+  }
+
+
+  /* =========================================================
+     ACTUALIZAR DISPONIBLES
+     ========================================================= */
+
+  function actualizarDisponibles() {
+
+    const usados =
+      new Set([
+        ...productosMostrados,
+        ...productosProcesando
+      ]);
+
+
+    productosDisponibles =
+      productosCatalogo.filter(
+        producto =>
+          !usados.has(
+            producto.url
+          )
+      );
   }
 
 
@@ -240,60 +417,98 @@
      OBTENER MARCAS
      ========================================================= */
 
-  async function obtenerMarcas(categoria) {
+  async function obtenerMarcas(
+    categoria
+  ) {
+
     try {
-      const respuesta = await fetch(
-        "/" + categoria,
-        {
-          credentials: "same-origin"
-        }
-      );
+
+      const respuesta =
+        await fetch(
+          "/" + categoria,
+          {
+            credentials:
+              "same-origin"
+          }
+        );
+
 
       if (!respuesta.ok) {
-        throw new Error(
-          "No se pudo obtener la categoría: " +
-          respuesta.status
-        );
+        return [];
       }
 
-      const html = await respuesta.text();
 
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
+      const html =
+        await respuesta.text();
 
-      const enlaces = Array.from(doc.querySelectorAll("a[href]"));
+
+      const parser =
+        new DOMParser();
+
+
+      const doc =
+        parser.parseFromString(
+          html,
+          "text/html"
+        );
+
+
+      const enlaces =
+        Array.from(
+          doc.querySelectorAll(
+            "a[href]"
+          )
+        );
+
 
       const marcas = [];
       const vistas = new Set();
 
-      enlaces.forEach(enlace => {
-        const hrefOriginal = enlace.getAttribute("href");
 
-        if (!hrefOriginal) return;
+      enlaces.forEach(enlace => {
+
+        const href =
+          enlace.getAttribute(
+            "href"
+          );
+
+        if (!href) return;
+
 
         let url;
 
         try {
-          url = new URL(
-            hrefOriginal,
-            window.location.origin
-          );
+
+          url =
+            new URL(
+              href,
+              window.location.origin
+            );
+
         } catch (e) {
+
           return;
+
         }
 
-        const path = url.pathname
-          .replace(/^\/|\/$/g, "")
-          .split("/")
-          .filter(Boolean);
+
+        const path =
+          url.pathname
+            .replace(/^\/|\/$/g, "")
+            .split("/")
+            .filter(Boolean);
+
 
         /*
          * Marca:
          *
-         * /fragancias-arabes/marca
+         * /categoria/marca
          */
 
-        if (path.length !== 2) return;
+        if (path.length !== 2) {
+          return;
+        }
+
 
         if (
           path[0].toLowerCase() !==
@@ -302,19 +517,35 @@
           return;
         }
 
-        const urlMarca = url.href;
 
-        if (vistas.has(urlMarca)) return;
+        if (
+          vistas.has(
+            url.href
+          )
+        ) {
+          return;
+        }
 
-        vistas.add(urlMarca);
 
-        marcas.push(urlMarca);
+        vistas.add(
+          url.href
+        );
+
+
+        marcas.push(
+          url.href
+        );
+
       });
 
-      return mezclar(marcas);
+
+      return mezclar(
+        marcas
+      );
 
     } catch (error) {
-      console.error(
+
+      console.warn(
         "[HESPERIA] Error obteniendo marcas:",
         error
       );
@@ -325,75 +556,40 @@
 
 
   /* =========================================================
-     CARGAR CATALOGO
+     CARGAR CATALOGO EN SEGUNDO PLANO
      ========================================================= */
 
-  async function obtenerCatalogo() {
-    if (catalogoCargado || catalogoCargando) {
+  async function cargarCatalogoEnSegundoPlano() {
+
+    if (
+      catalogoCargando ||
+      catalogoCargado
+    ) {
       return;
     }
 
-    catalogoCargando = true;
+
+    catalogoCargando =
+      true;
+
 
     try {
 
       /*
-       * PRIMERA FUENTE:
-       * página principal de la categoría.
-       *
-       * Esto permite mostrar productos rápidamente
-       * mientras se arma el catálogo completo.
-       */
-
-      try {
-        const respuestaCategoria = await fetch(
-          "/" + categoriaActual,
-          {
-            credentials: "same-origin"
-          }
-        );
-
-        if (respuestaCategoria.ok) {
-          const htmlCategoria =
-            await respuestaCategoria.text();
-
-          const productosCategoria =
-            extraerProductos(
-              htmlCategoria,
-              categoriaActual
-            );
-
-          productosCategoria.forEach(producto => {
-
-            if (
-              !productosCatalogo.some(
-                p => p.url === producto.url
-              )
-            ) {
-              productosCatalogo.push(producto);
-            }
-
-          });
-        }
-
-      } catch (error) {
-        console.warn(
-          "[HESPERIA] No se pudo leer categoría:",
-          error
-        );
-      }
-
-
-      /*
-       * SEGUNDA FUENTE:
-       * páginas de cada marca.
-       *
-       * Se consulta UNA POR UNA para evitar
-       * sobrecargar Empretienda.
+       * Obtenemos las marcas.
        */
 
       const marcas =
-        await obtenerMarcas(categoriaActual);
+        await obtenerMarcas(
+          categoriaActual
+        );
+
+
+      /*
+       * Las consultamos una por una.
+       *
+       * Esto evita sobrecargar Empretienda.
+       */
 
       for (
         let i = 0;
@@ -402,6 +598,11 @@
         i++
       ) {
 
+        /*
+         * Si ya tenemos suficiente catálogo,
+         * podemos dejar de consultar.
+         */
+
         if (
           productosCatalogo.length >=
           CONFIG.catalogoObjetivo
@@ -409,20 +610,24 @@
           break;
         }
 
+
         try {
 
           const respuesta =
             await fetch(
               marcas[i],
               {
-                credentials: "same-origin"
+                credentials:
+                  "same-origin"
               }
             );
+
 
           if (respuesta.ok) {
 
             const html =
               await respuesta.text();
+
 
             const productos =
               extraerProductos(
@@ -430,110 +635,102 @@
                 categoriaActual
               );
 
-            productos.forEach(producto => {
 
-              if (
-                !productosCatalogo.some(
-                  p => p.url === producto.url
-                )
-              ) {
-                productosCatalogo.push(producto);
-              }
+            agregarAlCatalogo(
+              productos
+            );
 
-            });
           }
 
         } catch (error) {
 
           console.warn(
             "[HESPERIA] Error consultando marca:",
-            marcas[i],
-            error
+            marcas[i]
           );
 
         }
 
-        /*
-         * Pequeña pausa entre marcas.
-         */
-        await esperar(CONFIG.pausaMarcas);
+
+        await esperar(
+          CONFIG.pausaMarcas
+        );
       }
 
 
       /*
-       * Mezclamos todo el catálogo para que las
-       * recomendaciones sean diferentes.
+       * Mezclamos los productos que todavía
+       * no fueron mostrados.
        */
 
-      productosCatalogo =
-        mezclar(productosCatalogo);
-
-
-      /*
-       * Eliminamos el producto actual y duplicados.
-       */
-
-      const unicos = [];
-      const urls = new Set();
-
-      productosCatalogo.forEach(producto => {
-
-        if (!producto.url) return;
-
-        if (esProductoActual(producto.url)) {
-          return;
-        }
-
-        if (urls.has(producto.url)) {
-          return;
-        }
-
-        urls.add(producto.url);
-        unicos.push(producto);
-      });
-
-      productosCatalogo = unicos;
-
-      /*
-       * Inicialmente todos están disponibles.
-       */
-
-      productosDisponibles =
-        productosCatalogo.filter(
-          producto =>
-            !productosMostrados.has(producto.url)
+      const mostrados =
+        new Set(
+          productosMostrados
         );
 
-      catalogoCargado = true;
+
+      const disponibles =
+        productosCatalogo.filter(
+          producto =>
+            !mostrados.has(
+              producto.url
+            )
+        );
+
+
+      const mezclados =
+        mezclar(
+          disponibles
+        );
+
+
+      productosDisponibles =
+        mezclados;
+
+
+      catalogoCargado =
+        true;
+
+
+      /*
+       * Si el usuario ya está cerca del final,
+       * aprovechamos para cargar más.
+       */
+
+      setTimeout(
+        revisarCarga,
+        100
+      );
+
 
     } catch (error) {
 
       console.error(
-        "[HESPERIA] Error general del catálogo:",
+        "[HESPERIA] Error cargando catálogo:",
         error
       );
 
     } finally {
 
-      catalogoCargando = false;
+      catalogoCargando =
+        false;
 
     }
   }
 
 
   /* =========================================================
-     OBTENER DATOS DEL PRODUCTO
+     OBTENER DATOS DE PRODUCTO
      ========================================================= */
 
-  async function obtenerDatosProducto(producto) {
+  async function obtenerDatosProducto(
+    producto
+  ) {
 
     const resultado = {
-      ...producto,
-      nombre: producto.nombre || "",
-      precioNormal: "",
-      precioCuotas: "",
-      precioTransferencia: ""
+      ...producto
     };
+
 
     try {
 
@@ -541,19 +738,24 @@
         await fetch(
           producto.url,
           {
-            credentials: "same-origin"
+            credentials:
+              "same-origin"
           }
         );
+
 
       if (!respuesta.ok) {
         return resultado;
       }
 
+
       const html =
         await respuesta.text();
 
+
       const parser =
         new DOMParser();
+
 
       const doc =
         parser.parseFromString(
@@ -561,19 +763,30 @@
           "text/html"
         );
 
+
       /*
        * NOMBRE
        */
 
       const h1 =
-        doc.querySelector("h1");
+        doc.querySelector(
+          "h1"
+        );
+
 
       if (h1) {
+
         const nombre =
-          limpiarTexto(h1.textContent);
+          limpiarTexto(
+            h1.textContent
+          );
+
 
         if (nombre) {
-          resultado.nombre = nombre;
+
+          resultado.nombre =
+            nombre;
+
         }
       }
 
@@ -582,7 +795,9 @@
        * IMAGEN
        */
 
-      if (!resultado.imagen) {
+      if (
+        !resultado.imagen
+      ) {
 
         const imagen =
           doc.querySelector(
@@ -595,11 +810,16 @@
             "img"
           );
 
+
         if (imagen) {
 
           resultado.imagen =
-            imagen.getAttribute("src") ||
-            imagen.getAttribute("data-src") ||
+            imagen.getAttribute(
+              "src"
+            ) ||
+            imagen.getAttribute(
+              "data-src"
+            ) ||
             imagen.getAttribute(
               "data-lazy-src"
             ) ||
@@ -609,21 +829,15 @@
       }
 
 
-      /*
-       * TEXTO COMPLETO
-       */
-
       const texto =
         limpiarTexto(
-          doc.body?.innerText || ""
+          doc.body?.innerText ||
+          ""
         );
 
 
       /*
-       * PRECIO DE TRANSFERENCIA
-       *
-       * Busca:
-       * Precio final: $XX
+       * TRANSFERENCIA
        */
 
       const transferencia =
@@ -631,90 +845,105 @@
           /Precio\s+final\s*:\s*\$?\s*[\d.]+(?:,\d{1,2})?/i
         );
 
-      if (transferencia) {
 
-        resultado.precioTransferencia =
-          extraerPrecio(
-            transferencia[0]
+      if (
+        transferencia
+      ) {
+
+        const precio =
+          transferencia[0].match(
+            /\$\s?[\d.]+(?:,\d{1,2})?/
           );
 
+
+        if (precio) {
+
+          resultado.precioTransferencia =
+            precio[0];
+
+        }
       }
 
 
       /*
        * PRECIO NORMAL
-       *
-       * Buscamos el precio asociado a:
-       * 3 cuotas sin interés
        */
 
       const indiceCuotas =
-        texto.toLowerCase().indexOf(
-          "3 cuotas sin interés"
-        );
+        texto
+          .toLowerCase()
+          .indexOf(
+            "3 cuotas sin interés"
+          );
 
-      if (indiceCuotas !== -1) {
+
+      if (
+        indiceCuotas !== -1
+      ) {
 
         const zona =
           texto.substring(
-            Math.max(0, indiceCuotas - 500),
+            Math.max(
+              0,
+              indiceCuotas - 500
+            ),
             indiceCuotas + 100
           );
+
 
         const precios =
           zona.match(
             /\$\s?[\d.]+(?:,\d{1,2})?/g
           );
 
-        if (precios && precios.length) {
-
-          /*
-           * Normalmente el último precio
-           * encontrado antes de las cuotas
-           * corresponde al precio normal.
-           */
-
-          resultado.precioNormal =
-            precios[precios.length - 1];
-        }
-      }
-
-
-      /*
-       * Si no encontramos el precio normal,
-       * buscamos precios generales.
-       */
-
-      if (!resultado.precioNormal) {
-
-        const precios =
-          texto.match(
-            /\$\s?[\d.]+(?:,\d{1,2})?/g
-          );
 
         if (
           precios &&
           precios.length
         ) {
 
-          /*
-           * Si tenemos transferencia,
-           * buscamos otro precio distinto.
-           */
+          resultado.precioNormal =
+            precios[
+              precios.length - 1
+            ];
+
+        }
+      }
+
+
+      /*
+       * FALLBACK
+       */
+
+      if (
+        !resultado.precioNormal
+      ) {
+
+        const precios =
+          texto.match(
+            /\$\s?[\d.]+(?:,\d{1,2})?/g
+          );
+
+
+        if (
+          precios &&
+          precios.length
+        ) {
 
           if (
             resultado.precioTransferencia
           ) {
 
-            const distinto =
+            const diferente =
               precios.find(
                 precio =>
                   precio !==
                   resultado.precioTransferencia
               );
 
+
             resultado.precioNormal =
-              distinto ||
+              diferente ||
               precios[0];
 
           } else {
@@ -727,29 +956,19 @@
       }
 
 
-      /*
-       * PRECIO 3 CUOTAS
-       *
-       * Si el precio normal existe,
-       * mostramos ese mismo valor como
-       * precio de lista para las cuotas.
-       *
-       * En Empretienda el producto muestra:
-       * precio normal + "3 cuotas sin interés".
-       */
-
       resultado.precioCuotas =
-        resultado.precioNormal || "";
+        resultado.precioNormal ||
+        "";
 
     } catch (error) {
 
       console.warn(
-        "[HESPERIA] Error producto:",
-        producto.url,
-        error
+        "[HESPERIA] Error obteniendo producto:",
+        producto.url
       );
 
     }
+
 
     return resultado;
   }
@@ -769,16 +988,23 @@
       return;
     }
 
+
     const producto =
       document.querySelector(
         ".product-vip"
       );
 
-    if (!producto) return;
+
+    if (!producto) {
+      return;
+    }
 
 
     contenedor =
-      document.createElement("section");
+      document.createElement(
+        "section"
+      );
+
 
     contenedor.id =
       "hesperia-recomendados";
@@ -822,12 +1048,9 @@
         </div>
 
       </div>
+
     `;
 
-
-    /*
-     * Insertamos debajo del producto.
-     */
 
     producto.insertAdjacentElement(
       "afterend",
@@ -840,15 +1063,18 @@
         ".hesperia-viewport"
       );
 
+
     track =
       contenedor.querySelector(
         ".hesperia-track"
       );
 
+
     btnAnterior =
       contenedor.querySelector(
         ".hesperia-prev"
       );
+
 
     btnSiguiente =
       contenedor.querySelector(
@@ -859,6 +1085,10 @@
     agregarEstilos();
 
 
+    /*
+     * ANTERIOR
+     */
+
     btnAnterior.addEventListener(
       "click",
       function () {
@@ -866,16 +1096,22 @@
         const distancia =
           obtenerDistanciaPorPagina();
 
+
         viewport.scrollBy({
           left: -distancia,
           behavior: "smooth"
         });
+
 
         actualizarFlechas();
 
       }
     );
 
+
+    /*
+     * SIGUIENTE
+     */
 
     btnSiguiente.addEventListener(
       "click",
@@ -884,16 +1120,12 @@
         const distancia =
           obtenerDistanciaPorPagina();
 
+
         viewport.scrollBy({
           left: distancia,
           behavior: "smooth"
         });
 
-        /*
-         * Revisamos inmediatamente y
-         * también después de que termine
-         * el desplazamiento.
-         */
 
         programarRevisionCarga();
 
@@ -901,20 +1133,26 @@
     );
 
 
+    /*
+     * SCROLL
+     */
+
     viewport.addEventListener(
       "scroll",
       function () {
 
         actualizarFlechas();
 
-        clearTimeout(scrollTimer);
+
+        clearTimeout(
+          scrollTimer
+        );
+
 
         scrollTimer =
           setTimeout(
-            function () {
-              revisarCarga();
-            },
-            80
+            revisarCarga,
+            70
           );
 
       },
@@ -924,6 +1162,10 @@
     );
 
 
+    /*
+     * RESIZE
+     */
+
     window.addEventListener(
       "resize",
       function () {
@@ -932,6 +1174,9 @@
 
       }
     );
+
+
+    actualizarFlechas();
   }
 
 
@@ -949,11 +1194,16 @@
       return;
     }
 
+
     const style =
-      document.createElement("style");
+      document.createElement(
+        "style"
+      );
+
 
     style.id =
       "hesperia-recomendados-styles";
+
 
     style.textContent = `
 
@@ -984,7 +1234,6 @@
         font-size: 25px;
         line-height: 1.2;
         font-weight: 500;
-        letter-spacing: 0;
         color: #111;
       }
 
@@ -1119,38 +1368,6 @@
         pointer-events: none;
       }
 
-      .hesperia-loading {
-        flex: 0 0 255px;
-        width: 255px;
-        min-width: 255px;
-        aspect-ratio: 1 / 1.45;
-        background:
-          linear-gradient(
-            90deg,
-            #f7f7f7 25%,
-            #eeeeee 50%,
-            #f7f7f7 75%
-          );
-        background-size: 200% 100%;
-        animation:
-          hesperiaShimmer 1.2s infinite;
-      }
-
-      @keyframes hesperiaShimmer {
-        from {
-          background-position: 200% 0;
-        }
-
-        to {
-          background-position: -200% 0;
-        }
-      }
-
-
-      /* =====================================================
-         TABLET
-         ===================================================== */
-
       @media (max-width: 900px) {
 
         .hesperia-rec-inner {
@@ -1180,21 +1397,7 @@
           height: 34px;
           font-size: 29px;
         }
-
-        .hesperia-loading {
-          flex-basis:
-            calc((100vw - 77px) / 2);
-          width:
-            calc((100vw - 77px) / 2);
-          min-width:
-            calc((100vw - 77px) / 2);
-        }
       }
-
-
-      /* =====================================================
-         MOBILE
-         ===================================================== */
 
       @media (max-width: 600px) {
 
@@ -1250,20 +1453,14 @@
           height: 30px;
           font-size: 27px;
         }
-
-        .hesperia-loading {
-          flex-basis:
-            calc((100vw - 70px) / 2);
-          width:
-            calc((100vw - 70px) / 2);
-          min-width:
-            calc((100vw - 70px) / 2);
-        }
       }
 
     `;
 
-    document.head.appendChild(style);
+
+    document.head.appendChild(
+      style
+    );
   }
 
 
@@ -1271,27 +1468,26 @@
      CREAR TARJETA
      ========================================================= */
 
-  function crearTarjeta(producto) {
+  function crearTarjeta(
+    producto
+  ) {
 
     const tarjeta =
-      document.createElement("a");
+      document.createElement(
+        "a"
+      );
+
 
     tarjeta.className =
       "hesperia-card";
 
+
     tarjeta.href =
       producto.url;
 
+
     tarjeta.target =
       "_self";
-
-    tarjeta.rel =
-      "noopener";
-
-
-    const imagen =
-      producto.imagen ||
-      "";
 
 
     tarjeta.innerHTML = `
@@ -1299,11 +1495,15 @@
       <div class="hesperia-card-image">
 
         ${
-          imagen
+          producto.imagen
             ? `
               <img
-                src="${imagen}"
-                alt="${escaparHtml(producto.nombre)}"
+                src="${escaparHtml(
+                  producto.imagen
+                )}"
+                alt="${escaparHtml(
+                  producto.nombre
+                )}"
                 loading="lazy"
               >
             `
@@ -1321,35 +1521,27 @@
       </div>
 
       <div class="hesperia-card-name">
-        ${escaparHtml(producto.nombre)}
+        ${escaparHtml(
+          producto.nombre
+        )}
       </div>
 
-      <div class="hesperia-card-normal">
-        ${
-          producto.precioNormal ||
-          ""
-        }
-      </div>
+      <div class="hesperia-card-normal"></div>
 
-      <div class="hesperia-card-cuotas">
-        ${
-          producto.precioCuotas
-            ? producto.precioCuotas +
-              " en 3 cuotas sin interés"
-            : ""
-        }
-      </div>
+      <div class="hesperia-card-cuotas"></div>
 
-      <div class="hesperia-card-transfer">
-        ${
-          producto.precioTransferencia
-            ? producto.precioTransferencia +
-              " con transferencia"
-            : ""
-        }
-      </div>
+      <div class="hesperia-card-transfer"></div>
 
     `;
+
+
+    /*
+     * Guardamos la URL para poder encontrar
+     * esta tarjeta después.
+     */
+
+    tarjeta.dataset.productUrl =
+      producto.url;
 
 
     return tarjeta;
@@ -1357,23 +1549,7 @@
 
 
   /* =========================================================
-     ESCAPAR HTML
-     ========================================================= */
-
-  function escaparHtml(texto) {
-
-    return String(texto || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-
-  }
-
-
-  /* =========================================================
-     ACTUALIZAR DATOS DE TARJETA
+     ACTUALIZAR TARJETA CON PRECIOS
      ========================================================= */
 
   function actualizarTarjeta(
@@ -1381,25 +1557,34 @@
     producto
   ) {
 
+    if (!tarjeta) {
+      return;
+    }
+
+
     const nombre =
       tarjeta.querySelector(
         ".hesperia-card-name"
       );
+
 
     const normal =
       tarjeta.querySelector(
         ".hesperia-card-normal"
       );
 
+
     const cuotas =
       tarjeta.querySelector(
         ".hesperia-card-cuotas"
       );
 
+
     const transferencia =
       tarjeta.querySelector(
         ".hesperia-card-transfer"
       );
+
 
     const imagen =
       tarjeta.querySelector(
@@ -1408,39 +1593,132 @@
 
 
     if (nombre) {
-      nombre.innerHTML =
-        escaparHtml(
-          producto.nombre
-        );
+
+      nombre.textContent =
+        producto.nombre ||
+        "";
+
     }
+
+
+    if (imagen) {
+
+      if (
+        producto.imagen
+      ) {
+
+        imagen.src =
+          producto.imagen;
+
+      }
+
+    }
+
 
     if (normal) {
+
       normal.textContent =
-        producto.precioNormal || "";
+        producto.precioNormal ||
+        "";
+
     }
 
+
     if (cuotas) {
+
       cuotas.textContent =
         producto.precioCuotas
           ? producto.precioCuotas +
             " en 3 cuotas sin interés"
           : "";
+
     }
 
+
     if (transferencia) {
+
       transferencia.textContent =
         producto.precioTransferencia
           ? producto.precioTransferencia +
             " con transferencia"
           : "";
-    }
 
-    if (
-      imagen &&
-      producto.imagen
+    }
+  }
+
+
+  /* =========================================================
+     CARGAR PRECIOS DE PRODUCTOS
+     ========================================================= */
+
+  async function cargarPrecios(
+    productos,
+    tarjetas
+  ) {
+
+    /*
+     * De a 2 para mantener velocidad
+     * sin bombardear Empretienda.
+     */
+
+    for (
+      let i = 0;
+      i < productos.length;
+      i += CONFIG.productosPorLote
     ) {
-      imagen.src =
-        producto.imagen;
+
+      const lote =
+        productos.slice(
+          i,
+          i +
+          CONFIG.productosPorLote
+        );
+
+
+      const resultados =
+        await Promise.all(
+          lote.map(
+            producto =>
+              obtenerDatosProducto(
+                producto
+              )
+          )
+        );
+
+
+      resultados.forEach(
+        resultado => {
+
+          const tarjeta =
+            tarjetas.get(
+              resultado.url
+            );
+
+
+          if (tarjeta) {
+
+            actualizarTarjeta(
+              tarjeta,
+              resultado
+            );
+
+          }
+
+        }
+      );
+
+
+      if (
+        i +
+        CONFIG.productosPorLote <
+        productos.length
+      ) {
+
+        await esperar(
+          CONFIG.pausaProductos
+        );
+
+      }
     }
   }
 
@@ -1453,19 +1731,29 @@
     cantidad
   ) {
 
-    if (cargando) return;
-
-    if (!productosDisponibles.length) {
-      actualizarFlechas();
+    if (cargando) {
       return;
     }
+
+
+    actualizarDisponibles();
+
+
+    if (
+      !productosDisponibles.length
+    ) {
+
+      actualizarFlechas();
+
+      return;
+    }
+
 
     cargando = true;
 
 
     /*
-     * Tomamos solamente la cantidad
-     * necesaria.
+     * Seleccionamos productos.
      */
 
     const seleccionados =
@@ -1476,82 +1764,103 @@
 
 
     /*
-     * Los marcamos inmediatamente como
-     * mostrados para evitar duplicados.
+     * Los marcamos como procesando.
      */
 
-    seleccionados.forEach(producto => {
-      productosMostrados.add(
-        producto.url
-      );
-    });
+    seleccionados.forEach(
+      producto => {
+
+        productosProcesando.add(
+          producto.url
+        );
+
+        productosMostrados.add(
+          producto.url
+        );
+
+      }
+    );
+
+
+    actualizarDisponibles();
 
 
     /*
-     * Procesamos de a 2 productos.
+     * TARJETAS SE CREAN INMEDIATAMENTE.
      *
-     * Esto acelera muchísimo la carga
-     * respecto a hacerlo uno por uno,
-     * pero evita una avalancha de requests.
+     * No esperamos a los precios.
      */
 
-    for (
-      let i = 0;
-      i < seleccionados.length;
-      i += CONFIG.productosPorLote
-    ) {
-
-      const lote =
-        seleccionados.slice(
-          i,
-          i + CONFIG.productosPorLote
-        );
+    const tarjetas =
+      new Map();
 
 
-      const resultados =
-        await Promise.all(
-          lote.map(producto =>
-            obtenerDatosProducto(
-              producto
-            )
-          )
-        );
-
-
-      resultados.forEach(producto => {
+    seleccionados.forEach(
+      producto => {
 
         const tarjeta =
-          crearTarjeta(producto);
+          crearTarjeta(
+            producto
+          );
+
 
         track.appendChild(
           tarjeta
         );
 
-      });
 
-
-      /*
-       * Pausa pequeña entre lotes.
-       */
-
-      if (
-        i + CONFIG.productosPorLote <
-        seleccionados.length
-      ) {
-        await esperar(
-          CONFIG.pausaProductos
+        tarjetas.set(
+          producto.url,
+          tarjeta
         );
+
       }
-    }
+    );
+
+
+    /*
+     * La interfaz ya está visible.
+     */
+
+    actualizarFlechas();
+
+
+    /*
+     * Ahora cargamos los precios
+     * en segundo plano.
+     */
+
+    cargarPrecios(
+      seleccionados,
+      tarjetas
+    ).finally(
+      function () {
+
+        seleccionados.forEach(
+          producto => {
+
+            productosProcesando.delete(
+              producto.url
+            );
+
+          }
+        );
+
+
+        actualizarDisponibles();
+
+        actualizarFlechas();
+
+      }
+    );
 
 
     cargando = false;
 
-    actualizarFlechas();
 
     /*
-     * Si la pantalla sigue cerca del final,
-     * comprobamos si hace falta otra tanda.
+     * Revisamos si hace falta cargar
+     * otra tanda.
      */
 
     setTimeout(
@@ -1574,13 +1883,17 @@
       return 0;
     }
 
+
     const tarjeta =
       track.querySelector(
         ".hesperia-card"
       );
 
+
     if (!tarjeta) {
+
       return viewport.clientWidth;
+
     }
 
 
@@ -1588,6 +1901,7 @@
       window.getComputedStyle(
         track
       );
+
 
     const gap =
       parseFloat(
@@ -1597,11 +1911,6 @@
       ) || 0;
 
 
-    /*
-     * PC = 4 productos
-     * Tablet/móvil = 2 productos
-     */
-
     const cantidad =
       window.innerWidth <= 900
         ? 2
@@ -1609,15 +1918,18 @@
 
 
     return (
-      (tarjeta.getBoundingClientRect().width +
-        gap) *
+      (
+        tarjeta.getBoundingClientRect()
+          .width +
+        gap
+      ) *
       cantidad
     );
   }
 
 
   /* =========================================================
-     ACTUALIZAR FLECHAS
+     FLECHAS
      ========================================================= */
 
   function actualizarFlechas() {
@@ -1640,72 +1952,66 @@
       viewport.clientWidth;
 
 
-    /*
-     * Flecha anterior
-     */
-
-    if (izquierda <= 5) {
-
-      btnAnterior.disabled = true;
-
-    } else {
-
-      btnAnterior.disabled = false;
-
-    }
+    btnAnterior.disabled =
+      izquierda <= 5;
 
 
     /*
-     * Flecha siguiente
-     *
-     * Mientras existan productos disponibles,
-     * dejamos la flecha activa.
+     * Si todavía estamos construyendo
+     * el catálogo, dejamos habilitada
+     * la flecha.
      */
 
     if (
       productosDisponibles.length > 0 ||
+      catalogoCargando ||
       cargando
     ) {
 
-      btnSiguiente.disabled = false;
-
-    } else if (
-      izquierda >= maxScroll - 5
-    ) {
-
-      btnSiguiente.disabled = true;
+      btnSiguiente.disabled =
+        false;
 
     } else {
 
-      btnSiguiente.disabled = false;
+      btnSiguiente.disabled =
+        izquierda >=
+        maxScroll - 5;
 
     }
   }
 
 
   /* =========================================================
-     REVISAR CARGA PROGRESIVA
+     CARGA PROGRESIVA
      ========================================================= */
 
   async function revisarCarga() {
 
-    if (
-      !viewport ||
-      cargando
-    ) {
+    if (!viewport) {
       return;
     }
 
 
+    if (cargando) {
+      return;
+    }
+
+
+    actualizarDisponibles();
+
+
     /*
-     * Si todavía no hay catálogo suficiente,
-     * no hacemos nada.
+     * Si no hay productos disponibles pero
+     * todavía estamos construyendo el catálogo,
+     * esperamos.
      */
 
     if (
       !productosDisponibles.length
     ) {
+
       actualizarFlechas();
+
       return;
     }
 
@@ -1715,23 +2021,22 @@
       viewport.clientWidth;
 
 
-    const posicionActual =
+    const posicion =
       viewport.scrollLeft;
 
 
     const restante =
       maxScroll -
-      posicionActual;
+      posicion;
 
 
     /*
-     * Cuando queda aproximadamente una
-     * pantalla para llegar al final,
-     * cargamos 4 productos más.
+     * Cargamos antes de llegar al final.
      */
 
     const limite =
-      viewport.clientWidth * 1.15;
+      viewport.clientWidth *
+      1.15;
 
 
     if (
@@ -1750,15 +2055,10 @@
 
 
   /* =========================================================
-     REVISIONES PROGRAMADAS
+     REVISION PROGRAMADA
      ========================================================= */
 
   function programarRevisionCarga() {
-
-    /*
-     * Varias comprobaciones pequeñas permiten
-     * detectar el final incluso con scroll suave.
-     */
 
     setTimeout(
       revisarCarga,
@@ -1783,13 +2083,13 @@
 
 
   /* =========================================================
-     INICIALIZACION
+     INICIAR
      ========================================================= */
 
   async function iniciar() {
 
     /*
-     * Solo ejecutar en producto.
+     * Solo páginas de producto.
      */
 
     if (
@@ -1810,55 +2110,111 @@
 
 
     /*
-     * Crear interfaz inmediatamente.
+     * CREAR LA INTERFAZ.
      */
 
     crearContenedor();
 
 
     /*
-     * Cargar catálogo.
+     * =====================================================
+     * PASO 1
+     * =====================================================
+     *
+     * Pedimos SOLO la categoría.
+     *
+     * Esta es la petición rápida.
      */
 
-    await obtenerCatalogo();
+    try {
+
+      const respuesta =
+        await fetch(
+          "/" + categoriaActual,
+          {
+            credentials:
+              "same-origin"
+          }
+        );
 
 
-    if (
-      !productosCatalogo.length
-    ) {
+      if (
+        respuesta.ok
+      ) {
+
+        const html =
+          await respuesta.text();
+
+
+        const productos =
+          extraerProductos(
+            html,
+            categoriaActual
+          );
+
+
+        /*
+         * Mezclamos los productos de la
+         * categoría.
+         */
+
+        agregarAlCatalogo(
+          mezclar(
+            productos
+          )
+        );
+
+      }
+
+    } catch (error) {
 
       console.warn(
-        "[HESPERIA] No se encontraron productos."
+        "[HESPERIA] Error inicial:",
+        error
       );
 
-      return;
     }
 
 
     /*
-     * Actualizar disponibles.
+     * =====================================================
+     * PASO 2
+     * =====================================================
+     *
+     * MOSTRAMOS LAS PRIMERAS 8.
+     *
+     * NO esperamos las marcas.
+     * NO esperamos los precios.
      */
 
-    productosDisponibles =
-      productosCatalogo.filter(
-        producto =>
-          !productosMostrados.has(
-            producto.url
-          )
+    actualizarDisponibles();
+
+
+    if (
+      productosDisponibles.length
+    ) {
+
+      await agregarProductos(
+        CONFIG.iniciales
       );
 
+    }
+
 
     /*
-     * Cargar las primeras 8.
+     * =====================================================
+     * PASO 3
+     * =====================================================
+     *
+     * AHORA, EN SEGUNDO PLANO,
+     * construimos el catálogo completo.
      */
 
-    await agregarProductos(
-      CONFIG.iniciales
-    );
+    cargarCatalogoEnSegundoPlano();
 
 
     /*
-     * Comprobación inicial.
+     * Comprobaciones posteriores.
      */
 
     programarRevisionCarga();
@@ -1866,7 +2222,7 @@
 
 
   /* =========================================================
-     ESPERAR A QUE ESTE LISTO EL DOM
+     DOM READY
      ========================================================= */
 
   if (
