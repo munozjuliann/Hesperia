@@ -16,6 +16,7 @@
   function normalizarURL(url) {
     try {
       const u = new URL(url, window.location.origin);
+
       u.search = "";
       u.hash = "";
 
@@ -49,7 +50,7 @@
   }
 
   /* =========================================================
-     DETECTAR CATEGORÍA DEL PRODUCTO ACTUAL
+     DETECTAR CATEGORÍA DEL PRODUCTO
   ========================================================= */
 
   function obtenerCategoria() {
@@ -130,92 +131,77 @@
     const marcas = [];
     const vistas = new Set();
 
-    /*
-     * Ejemplo:
-     *
-     * /fragancias-arabes/afnan
-     * /fragancias-arabes/armaf
-     *
-     * Una marca tiene exactamente un nivel
-     * después de la categoría.
-     */
+    [...doc.querySelectorAll("a[href]")]
+      .forEach(a => {
 
-    [...doc.querySelectorAll("a[href]")].forEach(a => {
+        const href =
+          normalizarURL(a.href);
 
-      const href =
-        normalizarURL(a.href);
+        if (!href) return;
 
-      if (!href) return;
+        const url =
+          new URL(href);
 
-      const url =
-        new URL(href);
+        const path =
+          url.pathname.replace(/\/$/, "");
 
-      const path =
-        url.pathname.replace(/\/$/, "");
+        const categoriaPath =
+          CATEGORIAS[categoria];
 
-      const categoriaPath =
-        CATEGORIAS[categoria];
+        if (
+          !path.startsWith(
+            categoriaPath + "/"
+          )
+        ) {
+          return;
+        }
 
-      if (!path.startsWith(categoriaPath + "/")) {
-        return;
-      }
+        const resto =
+          path.substring(
+            (categoriaPath + "/").length
+          );
 
-      const resto =
-        path.substring(
-          (categoriaPath + "/").length
-        );
+        /*
+         * Una marca tiene solamente un nivel:
+         *
+         * /fragancias-arabes/afnan
+         *
+         * Un producto tiene dos:
+         *
+         * /fragancias-arabes/afnan/9pm
+         */
 
-      /*
-       * Una marca:
-       *
-       * afnan
-       *
-       * Un producto:
-       *
-       * afnan/producto
-       *
-       * Por eso solo aceptamos cuando no
-       * existe otro "/" dentro de resto.
-       */
+        if (!resto || resto.includes("/")) {
+          return;
+        }
 
-      if (!resto || resto.includes("/")) {
-        return;
-      }
+        if (
+          resto === "ver-todo" ||
+          resto === "productos"
+        ) {
+          return;
+        }
 
-      /*
-       * No aceptar "ver todo".
-       */
+        if (vistas.has(href)) {
+          return;
+        }
 
-      if (
-        resto === "ver-todo" ||
-        resto === "productos"
-      ) {
-        return;
-      }
+        vistas.add(href);
 
-      if (vistas.has(href)) {
-        return;
-      }
+        marcas.push(href);
 
-      vistas.add(href);
-
-      marcas.push(href);
-    });
+      });
 
     console.log(
       "HESPERIA: marcas encontradas:",
       marcas.length
     );
 
-    console.log(
-      marcas
-    );
-
     return marcas;
   }
 
   /* =========================================================
-     EXTRAER PRODUCTOS DE UNA PÁGINA DE MARCA
+     EXTRAER PRODUCTOS DE UNA PÁGINA
   ========================================================= */
 
   function extraerProductosDeHTML(
@@ -237,18 +223,6 @@
 
     const categoriaPath =
       CATEGORIAS[categoria];
-
-    /*
-     * Buscamos enlaces.
-     *
-     * Producto:
-     *
-     * /fragancias-arabes/afnan/9pm
-     *
-     * Marca:
-     *
-     * /fragancias-arabes/afnan
-     */
 
     [...doc.querySelectorAll("a[href]")]
       .forEach(a => {
@@ -278,7 +252,7 @@
           );
 
         /*
-         * Tiene que tener:
+         * Producto:
          *
          * marca/producto
          */
@@ -294,10 +268,6 @@
           return;
         }
 
-        /*
-         * Buscamos la imagen.
-         */
-
         const imagen =
           a.querySelector("img");
 
@@ -306,10 +276,6 @@
         }
 
         let nombre = "";
-
-        /*
-         * Primero intentamos ALT.
-         */
 
         if (
           imagen.alt &&
@@ -324,10 +290,6 @@
               )
               .trim();
         }
-
-        /*
-         * Si no hay ALT usamos el texto.
-         */
 
         if (!nombre) {
 
@@ -352,7 +314,9 @@
           imagen:
             imagen.currentSrc ||
             imagen.src ||
-            imagen.getAttribute("data-src") ||
+            imagen.getAttribute(
+              "data-src"
+            ) ||
             ""
 
         });
@@ -363,7 +327,7 @@
   }
 
   /* =========================================================
-     OBTENER TODO EL CATÁLOGO
+     OBTENER CATÁLOGO COMPLETO
   ========================================================= */
 
   async function obtenerCatalogoCompleto(
@@ -379,8 +343,6 @@
 
     /*
      * También procesamos la categoría general.
-     * Algunas tiendas pueden tener productos allí
-     * que no pertenecen a una marca visible.
      */
 
     const urls = [
@@ -413,7 +375,7 @@
       );
 
     /*
-     * Unificar todo y eliminar duplicados.
+     * Unificar productos y eliminar duplicados.
      */
 
     const mapa =
@@ -440,6 +402,7 @@
             }
           );
         }
+
       });
 
     const catalogo =
@@ -454,7 +417,7 @@
   }
 
   /* =========================================================
-     OBTENER DATOS / PRECIOS
+     OBTENER DATOS DEL PRODUCTO
   ========================================================= */
 
   async function obtenerDatosProducto(
@@ -481,9 +444,9 @@
           "text/html"
         );
 
-      /*
-       * NOMBRE
-       */
+      /* =====================================================
+         NOMBRE
+      ===================================================== */
 
       let nombre =
         producto.nombre;
@@ -505,9 +468,9 @@
             .trim();
       }
 
-      /*
-       * IMAGEN
-       */
+      /* =====================================================
+         IMAGEN
+      ===================================================== */
 
       let imagen =
         producto.imagen;
@@ -534,73 +497,141 @@
           imagen;
       }
 
-      /*
-       * PRECIOS
-       */
+      /* =====================================================
+         PRECIOS
+      ===================================================== */
 
       const texto =
         doc.body.innerText || "";
+
+      /*
+       * Todas las cantidades con formato:
+       *
+       * $86.145,12
+       */
 
       const precios =
         texto.match(
           /\$\s*[\d.]+,\d{2}/g
         ) || [];
 
-      const unicos =
+      const preciosUnicos =
         [...new Set(precios)];
 
-      let precioTransferencia =
-        "";
+      let precioNormal = "";
+      let precioTransferencia = "";
 
-      let precioNormal =
-        "";
+      /* =====================================================
+         PRECIO DE TRANSFERENCIA
+      ===================================================== */
 
       /*
-       * Precio final = transferencia
+       * Buscamos específicamente:
+       *
+       * Precio final: $68.916,10
        */
 
-      const precioFinal =
+      const matchTransferencia =
         texto.match(
           /Precio\s+final\s*:\s*(\$\s*[\d.]+,\d{2})/i
         );
 
-      if (precioFinal) {
+      if (matchTransferencia) {
 
         precioTransferencia =
-          precioFinal[1];
+          matchTransferencia[1];
+      }
+
+      /* =====================================================
+         PRECIO NORMAL / 3 CUOTAS
+      ===================================================== */
+
+      /*
+       * Buscamos el precio que aparece asociado
+       * a "3 cuotas".
+       *
+       * Ejemplo:
+       *
+       * $86.145,12
+       * 3 cuotas sin interés
+       */
+
+      const matchCuotas =
+        texto.match(
+          /(\$\s*[\d.]+,\d{2})[\s\S]{0,200}?3\s+cuotas/i
+        );
+
+      if (matchCuotas) {
+
+        precioNormal =
+          matchCuotas[1];
+      }
+
+      /* =====================================================
+         RESPALDO PARA PRECIO NORMAL
+      ===================================================== */
+
+      /*
+       * Si no encontramos "3 cuotas", buscamos
+       * el primer precio que sea diferente
+       * al precio de transferencia.
+       */
+
+      if (!precioNormal) {
+
+        const precioDiferente =
+          preciosUnicos.find(
+            precio =>
+              precio !==
+              precioTransferencia
+          );
+
+        if (precioDiferente) {
+
+          precioNormal =
+            precioDiferente;
+        }
       }
 
       /*
-       * Si no lo encontramos,
-       * usamos el primer precio.
+       * Último respaldo.
+       */
+
+      if (
+        !precioNormal &&
+        preciosUnicos.length
+      ) {
+
+        precioNormal =
+          preciosUnicos[0];
+      }
+
+      /*
+       * Si por alguna razón no encontramos
+       * transferencia pero tenemos varios precios,
+       * intentamos usar el último precio como
+       * transferencia.
        */
 
       if (
         !precioTransferencia &&
-        unicos.length
+        preciosUnicos.length >= 2
       ) {
 
         precioTransferencia =
-          unicos[0];
+          preciosUnicos[
+            preciosUnicos.length - 1
+          ];
       }
 
-      /*
-       * El precio normal suele ser
-       * el segundo precio.
-       */
-
-      if (unicos.length >= 2) {
-
-        precioNormal =
-          unicos[1];
-
-      } else if (
-        unicos.length === 1
-      ) {
-
-        precioNormal =
-          unicos[0];
-      }
+      console.log(
+        "HESPERIA:",
+        nombre,
+        "| cuotas:",
+        precioNormal,
+        "| transferencia:",
+        precioTransferencia
+      );
 
       return {
 
@@ -619,8 +650,9 @@
     } catch (error) {
 
       console.warn(
-        "HESPERIA: error producto",
-        producto.url
+        "HESPERIA: error obteniendo producto",
+        producto.url,
+        error
       );
 
       return null;
@@ -655,19 +687,31 @@
         position: relative;
       }
 
+      /* ============================
+         TÍTULO
+      ============================ */
+
       #hesperia-recomendados
       .hesperia-titulo {
         font-size: 24px;
         font-weight: 500;
         margin: 0 0 25px;
-        text-align: left;
+        text-align: center;
       }
+
+      /* ============================
+         CONTENEDOR
+      ============================ */
 
       #hesperia-recomendados
       .hesperia-wrapper {
         position: relative;
         width: 100%;
       }
+
+      /* ============================
+         CARRUSEL
+      ============================ */
 
       #hesperia-recomendados
       .hesperia-track {
@@ -686,13 +730,22 @@
         display: none;
       }
 
+      /* ============================
+         TARJETAS DESKTOP
+      ============================ */
+
       #hesperia-recomendados
       .hesperia-card {
-        flex: 0 0 calc((100% - 60px) / 4);
+        flex: 0 0 calc((100% - 90px) / 4);
+        max-width: 260px;
         min-width: 0;
         text-decoration: none;
         color: inherit;
       }
+
+      /* ============================
+         IMAGEN
+      ============================ */
 
       #hesperia-recomendados
       .hesperia-card img {
@@ -703,6 +756,10 @@
         background: #fff;
       }
 
+      /* ============================
+         NOMBRE
+      ============================ */
+
       #hesperia-recomendados
       .hesperia-name {
         margin-top: 12px;
@@ -711,11 +768,20 @@
         font-weight: 500;
       }
 
+      /* ============================
+         PRECIO NORMAL
+      ============================ */
+
       #hesperia-recomendados
       .hesperia-price-normal {
         margin-top: 6px;
         font-size: 14px;
+        font-weight: 500;
       }
+
+      /* ============================
+         PRECIO TRANSFERENCIA
+      ============================ */
 
       #hesperia-recomendados
       .hesperia-price-transfer {
@@ -723,6 +789,10 @@
         font-size: 13px;
         opacity: .7;
       }
+
+      /* ============================
+         FLECHAS
+      ============================ */
 
       #hesperia-recomendados
       .hesperia-arrow {
@@ -755,11 +825,29 @@
         right: -20px;
       }
 
+      /* ============================
+         TABLET
+      ============================ */
+
+      @media (max-width: 1100px) {
+
+        #hesperia-recomendados
+        .hesperia-card {
+          max-width: 230px;
+        }
+
+      }
+
+      /* ============================
+         MOBILE
+      ============================ */
+
       @media (max-width: 900px) {
 
         #hesperia-recomendados
         .hesperia-card {
           flex: 0 0 calc((100% - 20px) / 2);
+          max-width: none;
         }
 
         #hesperia-recomendados
@@ -771,7 +859,12 @@
         .hesperia-arrow-right {
           right: 5px;
         }
+
       }
+
+      /* ============================
+         CELULAR
+      ============================ */
 
       @media (max-width: 600px) {
 
@@ -787,6 +880,7 @@
         #hesperia-recomendados
         .hesperia-card {
           flex: 0 0 calc((100% - 12px) / 2);
+          max-width: none;
         }
 
         #hesperia-recomendados
@@ -801,7 +895,9 @@
           height: 34px;
           font-size: 18px;
         }
+
       }
+
     `;
 
     document.head.appendChild(style);
@@ -841,6 +937,23 @@
               ${escaparHTML(
                 producto.precioNormal
               )}
+          `
+          : ""
+      }
+
+      ${
+        producto.precioNormal
+          ? `
+              <span
+                style="
+                  font-size:11px;
+                  font-weight:400;
+                  opacity:.65;
+                  margin-left:3px;
+                "
+              >
+                3 cuotas sin interés
+              </span>
             </div>
           `
           : ""
@@ -873,9 +986,18 @@
     const categoria =
       obtenerCategoria();
 
+    /*
+     * Solo ejecutar en productos de las
+     * categorías correspondientes.
+     */
+
     if (!categoria) {
       return;
     }
+
+    /*
+     * Evitar duplicar el carrusel.
+     */
 
     if (
       document.getElementById(
@@ -886,7 +1008,7 @@
     }
 
     console.log(
-      "HESPERIA: iniciando..."
+      "HESPERIA: iniciando recomendaciones..."
     );
 
     console.log(
@@ -895,6 +1017,10 @@
     );
 
     crearEstilos();
+
+    /*
+     * CONTENEDOR DEL PRODUCTO
+     */
 
     const productVip =
       document.querySelector(
@@ -910,9 +1036,9 @@
       return;
     }
 
-    /*
-     * CREAR CARRUSEL
-     */
+    /* =====================================================
+       CREAR CARRUSEL
+    ===================================================== */
 
     const bloque =
       document.createElement("section");
@@ -947,6 +1073,7 @@
         </button>
 
       </div>
+
     `;
 
     productVip.parentNode.insertBefore(
@@ -969,9 +1096,9 @@
         ".hesperia-arrow-right"
       );
 
-    /*
-     * OBTENER CATÁLOGO COMPLETO
-     */
+    /* =====================================================
+       OBTENER CATÁLOGO
+    ===================================================== */
 
     const catalogo =
       await obtenerCatalogoCompleto(
@@ -994,9 +1121,9 @@
       return;
     }
 
-    /*
-     * EXCLUIR PRODUCTO ACTUAL
-     */
+    /* =====================================================
+       EXCLUIR PRODUCTO ACTUAL
+    ===================================================== */
 
     const actual =
       normalizarURL(
@@ -1011,9 +1138,9 @@
           ) !== actual
       );
 
-    /*
-     * MEZCLAR TODO EL CATÁLOGO
-     */
+    /* =====================================================
+       MEZCLAR TODO
+    ===================================================== */
 
     const productos =
       mezclar(disponibles);
@@ -1023,9 +1150,9 @@
     const usados =
       new Set();
 
-    /*
-     * AGREGAR PRODUCTOS
-     */
+    /* =====================================================
+       AGREGAR PRODUCTOS
+    ===================================================== */
 
     async function agregarProductos(
       cantidad
@@ -1062,11 +1189,8 @@
       }
 
       /*
-       * IMPORTANTE:
-       *
-       * Los precios solamente se solicitan
-       * para los productos que efectivamente
-       * se van a mostrar.
+       * Obtener datos únicamente de los
+       * productos que se van a mostrar.
        */
 
       const datos =
@@ -1090,51 +1214,59 @@
         });
     }
 
-    /*
-     * PRIMEROS 8
-     */
+    /* =====================================================
+       PRIMEROS 8
+    ===================================================== */
 
     await agregarProductos(
       CANTIDAD_INICIAL
     );
 
-    /*
-     * FLECHA DERECHA
-     */
+    /* =====================================================
+       FLECHA DERECHA
+    ===================================================== */
 
     derecha.addEventListener(
       "click",
       function () {
 
         track.scrollBy({
+
           left:
             track.clientWidth * 0.85,
-          behavior: "smooth"
+
+          behavior:
+            "smooth"
+
         });
 
       }
     );
 
-    /*
-     * FLECHA IZQUIERDA
-     */
+    /* =====================================================
+       FLECHA IZQUIERDA
+    ===================================================== */
 
     izquierda.addEventListener(
       "click",
       function () {
 
         track.scrollBy({
+
           left:
             -track.clientWidth * 0.85,
-          behavior: "smooth"
+
+          behavior:
+            "smooth"
+
         });
 
       }
     );
 
-    /*
-     * CARGAR MÁS AL ACERCARSE AL FINAL
-     */
+    /* =====================================================
+       CARGAR MÁS PRODUCTOS
+    ===================================================== */
 
     let cargando = false;
 
