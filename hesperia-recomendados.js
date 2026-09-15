@@ -6,72 +6,51 @@
 
     if (!producto) return;
 
-    var categoria = "";
-
-    if (location.pathname.indexOf("/fragancias-arabes/") !== -1) {
-      categoria = "/fragancias-arabes";
-    } 
-    else if (location.pathname.indexOf("/fragancias-disenador/") !== -1) {
-      categoria = "/fragancias-disenador";
-    }
-
-    if (!categoria) {
-      console.log("HESPERIA: categoría no detectada");
-      return;
-    }
-
-    console.log("HESPERIA: categoría detectada:", categoria);
+    var categoria = location.pathname.indexOf("/fragancias-arabes/") !== -1
+      ? "/fragancias-arabes"
+      : "/fragancias-disenador";
 
     fetch(categoria)
-      .then(function (respuesta) {
-        return respuesta.text();
+      .then(function (r) {
+        return r.text();
       })
       .then(function (html) {
 
-        var documento = new DOMParser().parseFromString(html, "text/html");
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        var enlaces = doc.querySelectorAll("a[href]");
 
-        var enlaces = documento.querySelectorAll("a[href]");
+        var datos = [];
 
-        console.log("HESPERIA: enlaces encontrados:", enlaces.length);
+        for (var i = 0; i < enlaces.length; i++) {
 
-        var productos = [];
+          var href = enlaces[i].getAttribute("href");
+          var texto = (enlaces[i].innerText || "").trim();
 
-        enlaces.forEach(function (enlace) {
-
-          var href = enlace.getAttribute("href");
-
-          if (!href) return;
-
-          if (href.indexOf(categoria + "/") !== 0) return;
-
-          var partes = href.split("/").filter(Boolean);
-
-          if (partes.length < 3) return;
-
-          if (productos.indexOf(href) === -1) {
-            productos.push(href);
+          if (href) {
+            datos.push(
+              "<div style='margin-bottom:12px;border-bottom:1px solid #ddd;padding-bottom:8px;'>" +
+              "<strong>TEXTO:</strong> " + texto +
+              "<br><strong>HREF:</strong> " + href +
+              "</div>"
+            );
           }
 
-        });
-
-        console.log("HESPERIA: productos encontrados:", productos);
+          if (datos.length >= 30) break;
+        }
 
         var bloque = document.createElement("div");
 
         bloque.style.cssText =
-          "margin:50px 0;padding:30px;background:#f5f5f5;";
+          "margin:50px 0;padding:30px;background:#f5f5f5;color:#111;font-size:14px;text-align:left;";
 
         bloque.innerHTML =
-          "<h2>Productos encontrados</h2>" +
-          "<p>" +
-          productos.slice(0, 10).join("<br>") +
-          "</p>";
+          "<h2>ENLACES REALES DE EMPRETIENDA</h2>" +
+          datos.join("");
 
         producto.appendChild(bloque);
 
-      })
-      .catch(function (error) {
-        console.log("HESPERIA ERROR:", error);
+        console.log("HESPERIA: enlaces inspeccionados:", enlaces.length);
+
       });
 
   });
