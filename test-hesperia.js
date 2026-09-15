@@ -1,4 +1,5 @@
 (function () {
+
     function iniciar() {
 
         if (!document.querySelector(".product-vip")) {
@@ -34,9 +35,7 @@
 
                     var alt = img.getAttribute("alt") || "";
 
-                    if (!alt.startsWith("Producto -")) {
-                        return;
-                    }
+                    if (!alt.startsWith("Producto -")) return;
 
                     var nombre = alt
                         .replace(/^Producto - /, "")
@@ -45,37 +44,27 @@
 
                     var enlace = img.closest("a");
 
-                    if (!enlace) {
-                        return;
-                    }
+                    if (!enlace) return;
 
                     var url = enlace.href;
 
-                    if (vistos[url]) {
-                        return;
-                    }
+                    if (vistos[url]) return;
 
                     vistos[url] = true;
-
-                    var tarjeta = img.closest("article, li, div");
-
-                    var precio = "";
-
-                    if (tarjeta) {
-                        precio = tarjeta.innerText || "";
-                    }
 
                     productos.push({
                         nombre: nombre,
                         url: url,
-                        imagen: img.src,
-                        texto: precio.substring(0, 500)
+                        imagen: img.src
                     });
                 });
 
-                var salida = document.createElement("div");
+                // Tomamos solamente los primeros 3 para probar
+                var pruebas = productos.slice(0, 3);
 
-                salida.style.cssText = `
+                var caja = document.createElement("div");
+
+                caja.style.cssText = `
                     position: relative;
                     z-index: 99999;
                     background: white;
@@ -86,25 +75,69 @@
                     font-family: Arial, sans-serif;
                 `;
 
-                salida.innerHTML =
-                    "<h2>PRODUCTOS + PRECIO</h2>" +
-                    "<p>Encontrados: " + productos.length + "</p>";
+                caja.innerHTML = `
+                    <h2>PRUEBA DE PRECIOS</h2>
+                    <p>Consultando ${pruebas.length} productos...</p>
+                    <div id="resultado-precios"></div>
+                `;
 
-                productos.forEach(function (producto) {
+                document.body.prepend(caja);
 
-                    salida.innerHTML +=
-                        "<hr>" +
-                        "<strong>" + producto.nombre + "</strong>" +
-                        "<br><br>" +
-                        "<b>URL:</b> " + producto.url +
-                        "<br><br>" +
-                        "<b>Texto tarjeta:</b><br>" +
-                        producto.texto.replace(/\n/g, "<br>");
+                var resultado = caja.querySelector("#resultado-precios");
+
+                pruebas.forEach(function (producto) {
+
+                    fetch(producto.url)
+                        .then(function (respuesta) {
+                            return respuesta.text();
+                        })
+                        .then(function (htmlProducto) {
+
+                            var docProducto =
+                                parser.parseFromString(htmlProducto, "text/html");
+
+                            var textos = [];
+
+                            docProducto.querySelectorAll(
+                                "[class*='price'], [class*='precio'], [class*='Price'], [class*='Precio']"
+                            ).forEach(function (elemento) {
+
+                                var texto = elemento.innerText.trim();
+
+                                if (texto) {
+                                    textos.push(texto);
+                                }
+
+                            });
+
+                            resultado.innerHTML += `
+                                <hr>
+                                <h3>${producto.nombre}</h3>
+                                <b>URL:</b><br>
+                                ${producto.url}
+                                <br><br>
+                                <b>ELEMENTOS ENCONTRADOS:</b><br>
+                                ${textos.length
+                                    ? textos.join("<br>")
+                                    : "NO ENCONTRADO"}
+                            `;
+
+                        })
+                        .catch(function (error) {
+
+                            resultado.innerHTML += `
+                                <hr>
+                                <h3>${producto.nombre}</h3>
+                                ERROR AL CONSULTAR
+                            `;
+
+                        });
+
                 });
 
-                document.body.prepend(salida);
             });
     }
 
     iniciar();
+
 })();
