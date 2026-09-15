@@ -2,6 +2,7 @@
 
     console.log("HESPERIA RECOMENDADOS - INICIANDO");
 
+
     /* =========================================================
        CONFIGURACIÓN
     ========================================================= */
@@ -10,7 +11,7 @@
 
 
     /* =========================================================
-       FUNCIONES GENERALES
+       MEZCLAR PRODUCTOS ALEATORIAMENTE
     ========================================================= */
 
     function mezclar(array) {
@@ -19,7 +20,10 @@
 
         for (let i = copia.length - 1; i > 0; i--) {
 
-            const j = Math.floor(Math.random() * (i + 1));
+            const j =
+                Math.floor(
+                    Math.random() * (i + 1)
+                );
 
             [copia[i], copia[j]] =
                 [copia[j], copia[i]];
@@ -27,9 +31,12 @@
         }
 
         return copia;
-
     }
 
+
+    /* =========================================================
+       CONVERTIR PRECIO A NÚMERO
+    ========================================================= */
 
     function numeroPrecio(texto) {
 
@@ -49,7 +56,7 @@
 
 
     /* =========================================================
-       DETECTAR PRODUCTO
+       ESPERAR AL PRODUCTO
     ========================================================= */
 
     function esperarProducto() {
@@ -65,11 +72,9 @@
             );
 
             return;
-
         }
 
         iniciar(producto);
-
     }
 
 
@@ -106,7 +111,6 @@
 
 
         return null;
-
     }
 
 
@@ -156,6 +160,11 @@
                         imagen.getAttribute("alt")
                         || "";
 
+
+                    /*
+                     * Solamente tomamos imágenes
+                     * correspondientes a productos.
+                     */
 
                     if (
                         !alt
@@ -289,7 +298,7 @@
 
 
             console.log(
-                "HESPERIA - PRODUCTOS ENCONTRADOS:",
+                "HESPERIA - TOTAL DE PRODUCTOS DISPONIBLES:",
                 disponibles.length
             );
 
@@ -383,7 +392,6 @@
 
             const numericos =
                 precios
-
                     .map(function (texto) {
 
                         return {
@@ -399,7 +407,6 @@
                         };
 
                     })
-
                     .filter(function (precio) {
 
                         return !isNaN(
@@ -408,6 +415,13 @@
 
                     });
 
+
+            /*
+             * Ordenar de mayor a menor.
+             *
+             * Mayor = precio de cuotas.
+             * Menor = precio de transferencia.
+             */
 
             numericos.sort(
                 function (a, b) {
@@ -424,17 +438,10 @@
 
             return {
 
-                /* Precio más alto =
-                   3 cuotas sin interés */
-
                 cuotas:
                     numericos[0]
                         ? numericos[0].texto
                         : "",
-
-
-                /* Precio más bajo =
-                   transferencia */
 
                 transferencia:
                     numericos.length > 1
@@ -575,7 +582,9 @@
         productoPrincipal
     ) {
 
-        /* Evitar duplicados */
+        /*
+         * Evitar crear el carrusel dos veces.
+         */
 
         if (
             document.querySelector(
@@ -599,7 +608,7 @@
         if (!categoria) {
 
             console.log(
-                "HESPERIA - Categoría no detectada"
+                "HESPERIA - CATEGORÍA NO DETECTADA"
             );
 
             return;
@@ -635,7 +644,7 @@
 
 
         /* =====================================================
-           OBTENER PRECIOS
+           OBTENER PRECIOS DE TODOS
         ===================================================== */
 
         console.log(
@@ -686,7 +695,7 @@
 
 
         /* =====================================================
-           CONTENEDOR
+           CREAR CONTENEDOR
         ===================================================== */
 
         const contenedor =
@@ -1176,7 +1185,7 @@
 
 
         /* =====================================================
-           ELEMENTOS DEL CARRUSEL
+           ELEMENTOS
         ===================================================== */
 
         const track =
@@ -1198,17 +1207,16 @@
 
 
         /* =====================================================
-           SISTEMA ALEATORIO
+           TODOS LOS PRODUCTOS DISPONIBLES
         ===================================================== */
 
         /*
-         * IMPORTANTE:
+         * ACÁ ESTÁ LA PARTE IMPORTANTE:
          *
-         * Acá mezclamos TODOS los productos encontrados
-         * antes de empezar a mostrarlos.
+         * productosDisponibles contiene TODOS los productos
+         * encontrados dentro de la categoría.
          *
-         * Por lo tanto los primeros 8 salen
-         * aleatoriamente de toda la categoría.
+         * Primero los mezclamos completamente.
          */
 
         let productosDisponibles =
@@ -1218,24 +1226,25 @@
 
 
         /*
-         * Productos utilizados recientemente.
+         * Este historial existe solamente mientras
+         * esta página está abierta.
          *
-         * Esto evita que aparezca inmediatamente
-         * la misma fragancia otra vez.
+         * NO usa localStorage.
+         * NO guarda nada en el navegador.
          */
 
         let usadosRecientemente = [];
 
 
         /* =====================================================
-           ELEGIR PRODUCTO ALEATORIO
+           OBTENER SIGUIENTE PRODUCTO ALEATORIO
         ===================================================== */
 
         function obtenerSiguienteProducto() {
 
             /*
-             * Buscar productos que todavía no hayan
-             * aparecido recientemente.
+             * Buscar productos que todavía NO hayan
+             * aparecido durante esta sesión.
              */
 
             let candidatos =
@@ -1259,8 +1268,12 @@
 
 
             /*
-             * Si ya utilizamos todos los productos,
-             * comenzamos nuevamente.
+             * Si ya mostramos todos los productos,
+             * reiniciamos el historial.
+             *
+             * De esta manera podemos volver a utilizar
+             * todo el catálogo, pero solamente después
+             * de haber recorrido los demás productos.
              */
 
             if (
@@ -1268,6 +1281,18 @@
             ) {
 
                 usadosRecientemente = [];
+
+
+                /*
+                 * Volvemos a mezclar TODO el catálogo
+                 * antes de empezar nuevamente.
+                 */
+
+                productosDisponibles =
+                    mezclar(
+                        [...productosConPrecio]
+                    );
+
 
                 candidatos =
                     [
@@ -1278,8 +1303,8 @@
 
 
             /*
-             * Elegir uno completamente
-             * al azar.
+             * Elegir uno aleatoriamente entre
+             * TODOS los candidatos disponibles.
              */
 
             const elegido =
@@ -1293,29 +1318,13 @@
 
 
             /*
-             * Guardarlo como utilizado.
-
+             * Guardar solamente en memoria
+             * durante esta visita.
              */
 
             usadosRecientemente.push(
                 elegido
             );
-
-
-            /*
-             * Evitar que el historial
-             * crezca indefinidamente.
-             */
-
-            if (
-                usadosRecientemente.length
-                >
-                productosDisponibles.length
-            ) {
-
-                usadosRecientemente.shift();
-
-            }
 
 
             return elegido;
@@ -1382,9 +1391,7 @@
         function revisarScroll() {
 
             if (agregando) {
-
                 return;
-
             }
 
 
@@ -1399,7 +1406,7 @@
             /*
              * Cuando quedan aproximadamente
              * dos pantallas de productos,
-             * agregamos más.
+             * agregamos 4 más.
              */
 
             if (
@@ -1410,11 +1417,6 @@
 
                 agregando = true;
 
-
-                /*
-                 * Agregamos 4 productos nuevos.
-
-                 */
 
                 for (
                     let i = 0;
@@ -1471,7 +1473,8 @@
 
 
             const ancho =
-                tarjeta.getBoundingClientRect()
+                tarjeta
+                    .getBoundingClientRect()
                     .width;
 
 
@@ -1482,11 +1485,8 @@
 
 
             /*
-             * PC:
-             * mueve 4 productos
-             *
-             * Mobile:
-             * mueve 2 productos
+             * PC = 4 productos
+             * Mobile = 2 productos
              */
 
             const cantidad =
@@ -1545,7 +1545,7 @@
 
 
                 /*
-                 * Si estamos muy cerca del comienzo,
+                 * Si estamos muy cerca del inicio,
                  * agregamos productos nuevos adelante.
                  */
 
@@ -1595,8 +1595,8 @@
 
 
                     /*
-                     * Compensar el scroll
-                     * para evitar un salto visual.
+                     * Compensar el scroll para
+                     * evitar un salto visual.
                      */
 
                     requestAnimationFrame(
@@ -1713,8 +1713,7 @@
                             .clientX;
 
 
-                    moviendo =
-                        false;
+                    moviendo = false;
 
                 }
 
@@ -1751,8 +1750,7 @@
                         10
                     ) {
 
-                        moviendo =
-                            true;
+                        moviendo = true;
 
                     }
 
@@ -1772,8 +1770,7 @@
                 setTimeout(
                     function () {
 
-                        moviendo =
-                            false;
+                        moviendo = false;
 
                     },
                     150
@@ -1812,6 +1809,5 @@
     ========================================================= */
 
     esperarProducto();
-
 
 })();
