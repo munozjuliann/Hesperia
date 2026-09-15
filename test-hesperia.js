@@ -1,88 +1,110 @@
 (function () {
+    function iniciar() {
 
-  function iniciar() {
-
-    var producto = document.querySelector(".product-vip");
-
-    if (!producto) {
-      setTimeout(iniciar, 500);
-      return;
-    }
-
-    var categoria = location.pathname.indexOf("/fragancias-arabes/") !== -1
-      ? "/fragancias-arabes"
-      : "/fragancias-disenador";
-
-    fetch(categoria)
-      .then(function (respuesta) {
-        return respuesta.text();
-      })
-      .then(function (html) {
-
-        var doc = new DOMParser().parseFromString(html, "text/html");
-        var imagenes = doc.querySelectorAll("img");
-
-        var productos = [];
-
-        for (var i = 0; i < imagenes.length; i++) {
-
-          var img = imagenes[i];
-
-          var alt = img.getAttribute("alt") || "";
-
-          if (alt.indexOf("Producto -") !== 0) continue;
-
-          var enlace = img.closest("a");
-
-          if (!enlace) continue;
-
-          var href = enlace.getAttribute("href");
-
-          if (!href) continue;
-
-          productos.push({
-            nombre: alt
-              .replace(/^Producto - /, "")
-              .replace(/ - [01]$/, "")
-              .trim(),
-
-            imagen:
-              img.getAttribute("src") ||
-              img.getAttribute("data-src") ||
-              "",
-
-            url: href
-          });
-
+        if (!document.querySelector(".product-vip")) {
+            setTimeout(iniciar, 500);
+            return;
         }
 
-        var bloque = document.createElement("div");
+        var ruta = window.location.pathname;
 
-        bloque.style.cssText =
-          "margin:40px 0;padding:30px;background:#f5f5f5;color:#111;text-align:left;";
+        var categoria = "";
 
-        bloque.innerHTML =
-          "<h2>PRODUCTOS + URL</h2>" +
-          "<p>Encontrados: " + productos.length + "</p>" +
-          productos.slice(0, 20).map(function (p) {
+        if (ruta.includes("/fragancias-arabes/")) {
+            categoria = "/fragancias-arabes";
+        } else if (ruta.includes("/fragancias-disenador/")) {
+            categoria = "/fragancias-disenador";
+        } else {
+            return;
+        }
 
-            return (
-              "<div style='padding:12px 0;border-bottom:1px solid #ccc;'>" +
-              "<strong>" + p.nombre + "</strong><br>" +
-              "<small>" + p.url + "</small>" +
-              "</div>"
-            );
+        fetch(categoria)
+            .then(function (respuesta) {
+                return respuesta.text();
+            })
+            .then(function (html) {
 
-          }).join("");
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(html, "text/html");
 
-        producto.appendChild(bloque);
+                var productos = [];
+                var vistos = {};
 
-        console.log("HESPERIA PRODUCTOS:", productos);
+                doc.querySelectorAll("img").forEach(function (img) {
 
-      });
+                    var alt = img.getAttribute("alt") || "";
 
-  }
+                    if (!alt.startsWith("Producto -")) {
+                        return;
+                    }
 
-  iniciar();
+                    var nombre = alt
+                        .replace(/^Producto - /, "")
+                        .replace(/ - [01]$/, "")
+                        .trim();
 
+                    var enlace = img.closest("a");
+
+                    if (!enlace) {
+                        return;
+                    }
+
+                    var url = enlace.href;
+
+                    if (vistos[url]) {
+                        return;
+                    }
+
+                    vistos[url] = true;
+
+                    var tarjeta = img.closest("article, li, div");
+
+                    var precio = "";
+
+                    if (tarjeta) {
+                        precio = tarjeta.innerText || "";
+                    }
+
+                    productos.push({
+                        nombre: nombre,
+                        url: url,
+                        imagen: img.src,
+                        texto: precio.substring(0, 500)
+                    });
+                });
+
+                var salida = document.createElement("div");
+
+                salida.style.cssText = `
+                    position: relative;
+                    z-index: 99999;
+                    background: white;
+                    color: black;
+                    padding: 30px;
+                    margin: 30px;
+                    border: 3px solid black;
+                    font-family: Arial, sans-serif;
+                `;
+
+                salida.innerHTML =
+                    "<h2>PRODUCTOS + PRECIO</h2>" +
+                    "<p>Encontrados: " + productos.length + "</p>";
+
+                productos.forEach(function (producto) {
+
+                    salida.innerHTML +=
+                        "<hr>" +
+                        "<strong>" + producto.nombre + "</strong>" +
+                        "<br><br>" +
+                        "<b>URL:</b> " + producto.url +
+                        "<br><br>" +
+                        "<b>Texto tarjeta:</b><br>" +
+                        producto.texto.replace(/\n/g, "<br>");
+                });
+
+                document.body.prepend(salida);
+            });
+    }
+
+    iniciar();
 })();
