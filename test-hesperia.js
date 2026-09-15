@@ -717,9 +717,8 @@
                 }
             );
 
-        const seleccionados =
-            mezclar(disponibles)
-                .slice(0, 8);
+const seleccionados =
+    mezclar(disponibles);
 
         if (!seleccionados.length) {
             return;
@@ -936,50 +935,252 @@
            FLECHAS
         ========================= */
 
-        const izquierda =
-            seccion.querySelector(
-                ".hesperia-flecha-izq"
-            );
+       /* =========================
+   CARRUSEL INFINITO
+========================= */
 
-        const derecha =
-            seccion.querySelector(
-                ".hesperia-flecha-der"
-            );
+const izquierda =
+    seccion.querySelector(
+        ".hesperia-flecha-izq"
+    );
 
-        function mover(direccion) {
+const derecha =
+    seccion.querySelector(
+        ".hesperia-flecha-der"
+    );
 
-            const ancho =
-                track.clientWidth;
 
-            track.scrollBy({
+/*
+    Guardamos las tarjetas originales
+*/
 
-                left:
-                    direccion *
-                    (ancho * 0.95),
+const tarjetasOriginales =
+    Array.from(
+        track.querySelectorAll(
+            ".hesperia-card"
+        )
+    );
 
-                behavior:
-                    "smooth"
 
-            });
+/*
+    Si hay suficientes productos,
+    creamos copias para generar
+    el efecto infinito.
+*/
+
+if (tarjetasOriginales.length > 4) {
+
+    tarjetasOriginales.forEach(
+        function (tarjeta) {
+
+            const clon =
+                tarjeta.cloneNode(true);
+
+            track.appendChild(clon);
 
         }
+    );
 
-        izquierda.addEventListener(
-            "click",
-            function () {
-                mover(-1);
-            }
+}
+
+
+/*
+    Calculamos cuánto ocupa
+    un bloque completo.
+*/
+
+function obtenerAnchoBloque() {
+
+    const tarjetas =
+        track.querySelectorAll(
+            ".hesperia-card"
         );
 
-        derecha.addEventListener(
-            "click",
-            function () {
-                mover(1);
-            }
+    if (!tarjetas.length) {
+        return 0;
+    }
+
+    let ancho = 0;
+
+    tarjetasOriginales.forEach(
+        function (tarjeta) {
+
+            ancho +=
+                tarjeta.offsetWidth;
+
+        }
+    );
+
+    const estilo =
+        window.getComputedStyle(
+            track
         );
+
+    const gap =
+        parseFloat(
+            estilo.columnGap ||
+            estilo.gap ||
+            0
+        );
+
+    ancho +=
+        gap *
+        (tarjetasOriginales.length - 1);
+
+    return ancho;
+}
+
+
+/*
+    Cuando llegamos al final
+    volvemos silenciosamente
+    al bloque original.
+*/
+
+function comprobarLoop() {
+
+    const bloque =
+        obtenerAnchoBloque();
+
+    if (!bloque) {
+        return;
+    }
+
+    /*
+        Si avanzamos demasiado,
+        volvemos al bloque inicial.
+    */
+
+    if (
+        track.scrollLeft >=
+        bloque * 1.5
+    ) {
+
+        track.scrollLeft -=
+            bloque;
 
     }
 
+    /*
+        Si el usuario vuelve demasiado
+        hacia atrás, lo mandamos al
+        bloque equivalente de adelante.
+    */
+
+    if (
+        track.scrollLeft < 10
+    ) {
+
+        track.scrollLeft +=
+            bloque;
+
+    }
+
+}
+
+
+/*
+    Ponemos el carrusel inicialmente
+    en el segundo bloque.
+*/
+
+setTimeout(
+    function () {
+
+        const bloque =
+            obtenerAnchoBloque();
+
+        if (bloque) {
+
+            track.scrollLeft =
+                bloque;
+
+        }
+
+    },
+    100
+);
+
+
+/*
+    Detectamos desplazamiento
+    manual o por flechas.
+*/
+
+track.addEventListener(
+    "scroll",
+    function () {
+
+        comprobarLoop();
+
+    }
+);
+
+
+/*
+    Movimiento de las flechas
+*/
+
+function mover(direccion) {
+
+    const tarjeta =
+        track.querySelector(
+            ".hesperia-card"
+        );
+
+    if (!tarjeta) {
+        return;
+    }
+
+    const estilo =
+        window.getComputedStyle(
+            track
+        );
+
+    const gap =
+        parseFloat(
+            estilo.columnGap ||
+            estilo.gap ||
+            0
+        );
+
+    const distancia =
+        tarjeta.offsetWidth +
+        gap;
+
+    track.scrollBy({
+
+        left:
+            direccion *
+            distancia *
+            4,
+
+        behavior:
+            "smooth"
+
+    });
+
+}
+
+
+izquierda.addEventListener(
+    "click",
+    function () {
+
+        mover(-1);
+
+    }
+);
+
+
+derecha.addEventListener(
+    "click",
+    function () {
+
+        mover(1);
+
+    }
+);
     /* =========================
        ESPERAR PRODUCTO
     ========================= */
