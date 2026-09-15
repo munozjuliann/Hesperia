@@ -496,9 +496,7 @@
           );
       }
 
-      /* -------------------------
-         TRANSFERENCIA
-         ------------------------- */
+      /* TRANSFERENCIA */
 
       let transferencia = "";
 
@@ -518,9 +516,7 @@
             .trim();
       }
 
-      /* -------------------------
-         TODOS LOS PRECIOS
-         ------------------------- */
+      /* TODOS LOS PRECIOS */
 
       const precios = [];
 
@@ -548,9 +544,7 @@
         }
       }
 
-      /* -------------------------
-         PRECIO 3 CUOTAS
-         ------------------------- */
+      /* PRECIO 3 CUOTAS */
 
       let precioNormal = "";
 
@@ -773,7 +767,8 @@
       .hesperia-carousel {
         width: 100%;
         display: grid;
-        grid-template-columns: 34px minmax(0, 1fr) 34px;
+        grid-template-columns:
+          34px minmax(0, 1fr) 34px;
         align-items: center;
         column-gap: 10px;
       }
@@ -1188,6 +1183,61 @@
   }
 
   /* =========================================================
+     CALCULAR DESPLAZAMIENTO
+     ========================================================= */
+
+  function obtenerDistanciaPorPagina() {
+
+    const track =
+      document.querySelector(
+        "#hesperia-recomendados .hesperia-track"
+      );
+
+    if (!track) {
+      return 0;
+    }
+
+    const tarjeta =
+      track.querySelector(
+        ".hesperia-card"
+      );
+
+    if (!tarjeta) {
+      return 0;
+    }
+
+    const estilo =
+      window.getComputedStyle(
+        track
+      );
+
+    const gap =
+      parseFloat(
+        estilo.columnGap ||
+        estilo.gap ||
+        0
+      );
+
+    /*
+      Desktop:
+      4 productos.
+
+      Mobile:
+      2 productos.
+    */
+
+    const cantidad =
+      window.innerWidth <= 900
+        ? 2
+        : 4;
+
+    return (
+      (tarjeta.offsetWidth + gap) *
+      cantidad
+    );
+  }
+
+  /* =========================================================
      FLECHAS
      ========================================================= */
 
@@ -1264,11 +1314,6 @@
       viewport.scrollLeft -
       viewport.clientWidth;
 
-    /*
-      Cargamos antes de llegar al final.
-      Esto evita que aparezca un espacio vacío.
-    */
-
     if (
       distancia <
       viewport.clientWidth * 0.8
@@ -1311,10 +1356,15 @@
         "click",
         function () {
 
+          const distancia =
+            obtenerDistanciaPorPagina();
+
+          if (!distancia) {
+            return;
+          }
+
           viewport.scrollBy({
-            left:
-              -viewport.clientWidth *
-              0.85,
+            left: -distancia,
             behavior: "smooth"
           });
 
@@ -1328,10 +1378,15 @@
         "click",
         function () {
 
+          const distancia =
+            obtenerDistanciaPorPagina();
+
+          if (!distancia) {
+            return;
+          }
+
           viewport.scrollBy({
-            left:
-              viewport.clientWidth *
-              0.85,
+            left: distancia,
             behavior: "smooth"
           });
 
@@ -1362,11 +1417,6 @@
         passive: true
       }
     );
-
-    /*
-      También revisamos cuando cambia
-      el tamaño de la pantalla.
-    */
 
     window.addEventListener(
       "resize",
@@ -1421,21 +1471,11 @@
           productosCatalogo
         );
 
-      /*
-        Primeros 8.
-      */
-
       await agregarProductos(
         CONFIG.iniciales
       );
 
       actualizarFlechas();
-
-      /*
-        Si por el tamaño de pantalla
-        todavía queda espacio suficiente,
-        cargamos automáticamente más.
-      */
 
       setTimeout(
         revisarCarga,
